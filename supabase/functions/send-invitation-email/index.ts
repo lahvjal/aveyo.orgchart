@@ -25,14 +25,23 @@ serve(async (req) => {
   }
 
   try {
+    // Log request for debugging
+    console.log('Edge Function: Request received')
+    console.log('Edge Function: Headers:', Object.fromEntries(req.headers.entries()))
+    
     // Verify authentication
     const authHeader = req.headers.get('Authorization')
     if (!authHeader) {
+      console.error('Edge Function: Missing authorization header')
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log('Edge Function: Auth header found')
+    console.log('Edge Function: SUPABASE_URL:', Deno.env.get('SUPABASE_URL') ? 'set' : 'missing')
+    console.log('Edge Function: SUPABASE_ANON_KEY:', Deno.env.get('SUPABASE_ANON_KEY') ? 'set' : 'missing')
 
     // Verify user is admin
     const supabaseClient = createClient(
@@ -45,14 +54,18 @@ serve(async (req) => {
       }
     )
 
+    console.log('Edge Function: Getting user from auth header')
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     
     if (userError || !user) {
+      console.error('Edge Function: Failed to get user:', userError)
       return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
+        JSON.stringify({ error: 'Unauthorized', details: userError?.message }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log('Edge Function: User authenticated:', user.id)
 
     // Check if user is admin
     const { data: profile } = await supabaseClient
@@ -61,12 +74,17 @@ serve(async (req) => {
       .eq('id', user.id)
       .single()
 
+    console.log('Edge Function: Profile fetched:', profile)
+
     if (!profile?.is_admin) {
+      console.error('Edge Function: User is not admin')
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),
         { status: 403, headers: { 'Content-Type': 'application/json' } }
       )
     }
+
+    console.log('Edge Function: Admin verified, parsing request body')
 
     // Parse request body
     const requestData: InvitationEmailRequest = await req.json()

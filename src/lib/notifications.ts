@@ -344,8 +344,9 @@ export async function sendEmployeeInvitationEmail(
     }
 
     console.log('sendEmployeeInvitationEmail: Session found, calling Edge Function')
+    console.log('sendEmployeeInvitationEmail: Access token:', session.access_token ? 'exists' : 'missing')
 
-    // Call Supabase Edge Function with authentication
+    // Call Supabase Edge Function with explicit authorization header
     const { data, error } = await supabase.functions.invoke('send-invitation-email', {
       body: {
         email,
@@ -353,6 +354,9 @@ export async function sendEmployeeInvitationEmail(
         jobTitle,
         invitedBy,
         magicLink,
+      },
+      headers: {
+        Authorization: `Bearer ${session.access_token}`,
       },
     })
 
