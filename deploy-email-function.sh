@@ -59,7 +59,26 @@ if ! supabase secrets set FROM_EMAIL=noreply@send.aveyo.com; then
     echo -e "${RED}❌ Failed to set FROM_EMAIL${NC}"
     exit 1
 fi
-echo -e "${GREEN}✅ Secrets configured${NC}"
+
+echo "Setting SUPABASE_URL..."
+if ! supabase secrets set SUPABASE_URL=https://semzdcsumfnmjnhzhtst.supabase.co; then
+    echo -e "${RED}❌ Failed to set SUPABASE_URL${NC}"
+    exit 1
+fi
+
+echo "Setting SUPABASE_ANON_KEY..."
+if ! supabase secrets set SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlbXpkY3N1bWZubWpuaHpodHN0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzEyNjEwNzcsImV4cCI6MjA4NjgzNzA3N30.9VHLVSe7CtVPAcJNxUDxVVuvaciYTVWasauutrJeugA; then
+    echo -e "${RED}❌ Failed to set SUPABASE_ANON_KEY${NC}"
+    exit 1
+fi
+
+echo "Setting SUPABASE_SERVICE_ROLE_KEY..."
+if ! supabase secrets set SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNlbXpkY3N1bWZubWpuaHpodHN0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTI2MTA3NywiZXhwIjoyMDg2ODM3MDc3fQ.TroLuYJ-6ovI7x3IckDlN3OVRnQhxdHH1sydf218UGQ; then
+    echo -e "${RED}❌ Failed to set SUPABASE_SERVICE_ROLE_KEY${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}✅ All secrets configured${NC}"
 echo ""
 
 # Step 4: Deploy function

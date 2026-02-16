@@ -335,19 +335,18 @@ export async function sendEmployeeInvitationEmail(
   console.log('sendEmployeeInvitationEmail: Calling Edge Function')
   
   try {
-    // Get the current session for both user ID and auth token
-    const { data: { session, user } } = await supabase.auth.getSession()
+    // Get the current user ID to include in the request
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session || !user) {
-      console.error('sendEmployeeInvitationEmail: No active session')
+    if (!user) {
+      console.error('sendEmployeeInvitationEmail: No active user')
       return { success: false, error: 'Not authenticated' }
     }
 
     console.log('sendEmployeeInvitationEmail: Calling Edge Function with user ID:', user.id)
 
-    // Call Supabase Edge Function with BOTH auth header and user ID
-    // Auth header: for JWT verification by Edge Runtime
-    // User ID: for admin verification by our function code
+    // Call Supabase Edge Function with user ID in body
+    // JWT verification is disabled on the Edge Function side
     const { data, error } = await supabase.functions.invoke('send-invitation-email', {
       body: {
         userId: user.id,
@@ -356,9 +355,6 @@ export async function sendEmployeeInvitationEmail(
         jobTitle,
         invitedBy,
         magicLink,
-      },
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
       },
     })
 
