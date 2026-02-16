@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useProfiles, useProfileBranch } from '../hooks/useProfile'
+import { useProfiles, useProfileBranch, useProfile } from '../hooks/useProfile'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuth } from '../hooks/useAuth'
 import { OrgChartCanvas } from '../components/org-chart/OrgChartCanvas'
