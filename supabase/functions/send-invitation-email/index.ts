@@ -3,8 +3,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'noreply@send.aveyo.com'
+
+// Supabase automatically provides these
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 interface InvitationEmailRequest {
   email: string
@@ -28,18 +31,13 @@ serve(async (req) => {
 
   try {
     console.log('Edge Function: Request received')
-    console.log('Edge Function: Environment check - SUPABASE_URL:', !!SUPABASE_URL, 'SUPABASE_ANON_KEY:', !!SUPABASE_ANON_KEY)
     
-    // Get authorization header (try multiple case variations)
-    const authHeader = req.headers.get('Authorization') 
-                    || req.headers.get('authorization')
-                    || req.headers.get('AUTHORIZATION')
+    // Create Supabase client using service role to bypass RLS
+    // The Edge Runtime has already verified the JWT - we can trust the request
+    const authorizationHeader = req.headers.get('authorization')
     
-    console.log('Edge Function: Auth header present:', !!authHeader)
-    
-    if (!authHeader) {
-      console.error('Edge Function: No authorization header found')
-      console.log('Edge Function: Available headers:', Array.from(req.headers.keys()))
+    if (!authorizationHeader) {
+      console.error('Edge Function: No authorization header')
       return new Response(
         JSON.stringify({ error: 'Missing authorization header' }),
         { 
@@ -51,41 +49,24 @@ serve(async (req) => {
         }
       )
     }
-    
-    // Create Supabase client with explicit auth header
+
+    // Create client with the authorization from the request
     const supabaseClient = createClient(
       SUPABASE_URL,
       SUPABASE_ANON_KEY,
       {
-        global: {
-          headers: {
-            Authorization: authHeader,
-          },
-        },
+        global: { headers: { Authorization: authorizationHeader } },
+        auth: { persistSession: false },
       }
     )
 
-    console.log('Edge Function: Getting user from auth header')
+    // Get the authenticated user
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     
-    if (userError) {
-      console.error('Edge Function: Error getting user:', userError.message, userError.status)
+    if (userError || !user) {
+      console.error('Edge Function: Auth error:', userError?.message || 'No user')
       return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: userError.message }),
-        { 
-          status: 401, 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          } 
-        }
-      )
-    }
-    
-    if (!user) {
-      console.error('Edge Function: No user found')
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: 'No user found' }),
+        JSON.stringify({ error: 'Unauthorized', details: userError?.message || 'No user found' }),
         { 
           status: 401, 
           headers: { 
@@ -98,12 +79,27 @@ serve(async (req) => {
 
     console.log('Edge Function: User authenticated:', user.id)
 
-    // Check if user is admin
-    const { data: profile } = await supabaseClient
+    // Check if user is admin using service role client (bypasses RLS)
+    const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('is_admin')
       .eq('id', user.id)
       .single()
+
+    if (profileError) {
+      console.error('Edge Function: Error fetching profile:', profileError.message)
+      return new Response(
+        JSON.stringify({ error: 'Error verifying admin status', details: profileError.message }),
+        { 
+          status: 500, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          } 
+        }
+      )
+    }
 
     console.log('Edge Function: Profile fetched:', profile)
 
