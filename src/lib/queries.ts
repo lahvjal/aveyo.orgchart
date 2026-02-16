@@ -127,21 +127,30 @@ export function useShareLink(slug: string) {
   return useQuery({
     queryKey: ['share-link', slug],
     queryFn: async () => {
+      console.log('useShareLink: Fetching share link for slug:', slug)
+      
       const { data, error } = await supabase
         .from('share_links')
         .select('*')
         .eq('slug', slug)
         .single()
 
-      if (error) throw error
+      console.log('useShareLink: Response:', { data, error })
+
+      if (error) {
+        console.error('useShareLink: Error fetching share link:', error)
+        throw error
+      }
       
       const link = data as any
       
       // Check expiration
       if (link?.expires_at && new Date(link.expires_at) < new Date()) {
+        console.error('useShareLink: Share link has expired')
         throw new Error('Share link has expired')
       }
 
+      console.log('useShareLink: Share link found:', link)
       return link as ShareLink
     },
     enabled: !!slug,
