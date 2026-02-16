@@ -10,6 +10,7 @@ const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 interface InvitationEmailRequest {
+  userId: string // User ID of the requester (for admin verification)
   email: string
   fullName: string
   jobTitle: string
@@ -32,59 +33,19 @@ serve(async (req) => {
   try {
     console.log('Edge Function: Request received')
     
-    // Create Supabase client using service role to bypass RLS
-    // The Edge Runtime has already verified the JWT - we can trust the request
-    const authorizationHeader = req.headers.get('authorization')
+    // Parse request body first to get userId
+    const requestData: InvitationEmailRequest = await req.json()
+    const { userId, email, fullName, jobTitle, invitedBy, magicLink } = requestData
     
-    if (!authorizationHeader) {
-      console.error('Edge Function: No authorization header')
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { 
-          status: 401, 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          } 
-        }
-      )
-    }
-
-    // Create client with the authorization from the request
-    const supabaseClient = createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY,
-      {
-        global: { headers: { Authorization: authorizationHeader } },
-        auth: { persistSession: false },
-      }
-    )
-
-    // Get the authenticated user
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    console.log('Edge Function: Verifying user is admin:', userId)
     
-    if (userError || !user) {
-      console.error('Edge Function: Auth error:', userError?.message || 'No user')
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: userError?.message || 'No user found' }),
-        { 
-          status: 401, 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          } 
-        }
-      )
-    }
-
-    console.log('Edge Function: User authenticated:', user.id)
-
-    // Check if user is admin using service role client (bypasses RLS)
+    // Use service role to verify the user is an admin
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('is_admin')
-      .eq('id', user.id)
+      .eq('id', userId)
       .single()
 
     if (profileError) {
@@ -104,7 +65,7 @@ serve(async (req) => {
     console.log('Edge Function: Profile fetched:', profile)
 
     if (!profile?.is_admin) {
-      console.error('Edge Function: User is not admin, profile:', profile)
+      console.error('Edge Function: User is not admin')
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),
         { 
@@ -117,11 +78,7 @@ serve(async (req) => {
       )
     }
 
-    console.log('Edge Function: Admin verified, parsing request body')
-
-    // Parse request body
-    const requestData: InvitationEmailRequest = await req.json()
-    const { email, fullName, jobTitle, invitedBy, magicLink } = requestData
+    console.log('Edge Function: Admin verified, sending email')
 
     console.log('Sending invitation email to:', email)
 

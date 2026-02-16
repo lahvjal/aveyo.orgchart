@@ -335,28 +335,25 @@ export async function sendEmployeeInvitationEmail(
   console.log('sendEmployeeInvitationEmail: Calling Edge Function')
   
   try {
-    // Get the current session to ensure auth headers are included
-    const { data: { session } } = await supabase.auth.getSession()
+    // Get the current user ID to include in the request
+    const { data: { user } } = await supabase.auth.getUser()
     
-    if (!session) {
-      console.error('sendEmployeeInvitationEmail: No active session')
+    if (!user) {
+      console.error('sendEmployeeInvitationEmail: No active user')
       return { success: false, error: 'Not authenticated' }
     }
 
-    console.log('sendEmployeeInvitationEmail: Session found, calling Edge Function')
-    console.log('sendEmployeeInvitationEmail: Access token:', session.access_token ? 'exists' : 'missing')
+    console.log('sendEmployeeInvitationEmail: Calling Edge Function with user ID:', user.id)
 
-    // Call Supabase Edge Function with explicit authorization header
+    // Call Supabase Edge Function with user ID in body for verification
     const { data, error } = await supabase.functions.invoke('send-invitation-email', {
       body: {
+        userId: user.id, // Include user ID for server-side admin verification
         email,
         fullName,
         jobTitle,
         invitedBy,
         magicLink,
-      },
-      headers: {
-        Authorization: `Bearer ${session.access_token}`,
       },
     })
 
@@ -371,7 +368,6 @@ export async function sendEmployeeInvitationEmail(
     console.error('sendEmployeeInvitationEmail: Unexpected error:', error)
     return { 
       success: false, 
-      error: error instanceof Error ? error.message : 'Failed to send invitation email' 
-    }
+      error: error instanceof Error ? error.message : 'Failed to send invitation email' }
   }
 }
