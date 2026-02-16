@@ -335,7 +335,17 @@ export async function sendEmployeeInvitationEmail(
   console.log('sendEmployeeInvitationEmail: Calling Edge Function')
   
   try {
-    // Call Supabase Edge Function instead of Resend directly
+    // Get the current session to ensure auth headers are included
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session) {
+      console.error('sendEmployeeInvitationEmail: No active session')
+      return { success: false, error: 'Not authenticated' }
+    }
+
+    console.log('sendEmployeeInvitationEmail: Session found, calling Edge Function')
+
+    // Call Supabase Edge Function with authentication
     const { data, error } = await supabase.functions.invoke('send-invitation-email', {
       body: {
         email,
