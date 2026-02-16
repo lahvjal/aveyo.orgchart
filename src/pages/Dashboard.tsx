@@ -5,17 +5,30 @@ import { useAuth } from '../hooks/useAuth'
 import { OrgChartCanvas } from '../components/org-chart/OrgChartCanvas'
 import { EmployeeSearch } from '../components/search/EmployeeSearch'
 import { ProfileCard } from '../components/profile/ProfileCard'
+import { OnboardingWizard } from '../components/onboarding/OnboardingWizard'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
 import { X } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
+  const { data: currentProfile, isLoading: profileLoading } = useProfile()
   const { isAdmin, isLoading: permissionsLoading } = usePermissions()
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
 
   console.log('Dashboard: user:', user?.id)
+  console.log('Dashboard: currentProfile:', currentProfile)
   console.log('Dashboard: isAdmin:', isAdmin, 'permissionsLoading:', permissionsLoading)
+
+  // Check if user needs onboarding
+  const needsOnboarding = currentProfile && !currentProfile.onboarding_completed
+
+  console.log('Dashboard: needsOnboarding:', needsOnboarding)
+
+  // Show onboarding wizard if user hasn't completed it
+  if (!profileLoading && needsOnboarding && currentProfile) {
+    return <OnboardingWizard profile={currentProfile} onComplete={() => window.location.reload()} />
+  }
 
   // Admins see all profiles, users see their branch
   const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()

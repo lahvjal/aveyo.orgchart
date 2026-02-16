@@ -5,6 +5,7 @@ export interface Profile {
   preferred_name?: string | null
   job_title: string
   job_description: string | null
+  bio?: string | null
   start_date: string
   profile_photo_url: string | null
   phone: string | null
@@ -13,6 +14,7 @@ export interface Profile {
   manager_id: string | null
   social_links: SocialLinks | null
   is_admin: boolean
+  onboarding_completed?: boolean
   created_at: string
   updated_at: string
   department?: Department
