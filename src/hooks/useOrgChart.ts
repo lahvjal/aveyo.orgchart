@@ -1,0 +1,82 @@
+import { useMemo } from 'react'
+import type { Node, Edge } from 'reactflow'
+import dagre from 'dagre'
+import type { Profile } from '../types'
+
+export function useOrgChart(profiles: Profile[], isAdmin: boolean, currentUserId?: string) {
+  const { nodes, edges } = useMemo(() => {
+    if (!profiles || profiles.length === 0) {
+      return { nodes: [], edges: [] }
+    }
+
+    // Filter profiles based on permissions
+    let visibleProfiles = profiles
+    if (!isAdmin && currentUserId) {
+      // For non-admin users, show only their branch
+      // This is already filtered by the backend, but we keep this for clarity
+      visibleProfiles = profiles
+    }
+
+    // Create nodes
+    const nodes: Node[] = visibleProfiles.map((profile) => ({
+      id: profile.id,
+      type: 'employee',
+      data: { profile },
+      position: { x: 0, y: 0 }, // Will be calculated by dagre
+    }))
+
+    // Create edges (connections between manager and reports)
+    const edges: Edge[] = visibleProfiles
+      .filter((profile) => profile.manager_id)
+      .map((profile) => ({
+        id: `${profile.manager_id}-${profile.id}`,
+        source: profile.manager_id!,
+        target: profile.id,
+        type: 'smoothstep',
+        animated: false,
+        style: { stroke: '#94a3b8', strokeWidth: 2 },
+      }))
+
+    return { nodes, edges }
+  }, [profiles, isAdmin, currentUserId])
+
+  // Apply hierarchical layout using dagre
+  const layoutedNodes = useMemo(() => {
+    if (nodes.length === 0) return nodes
+
+    const dagreGraph = new dagre.graphlib.Graph()
+    dagreGraph.setDefaultEdgeLabel(() => ({}))
+    dagreGraph.setGraph({ 
+      rankdir: 'TB', // Top to bottom
+      nodesep: 100,
+      ranksep: 150,
+    })
+
+    // Add nodes to dagre
+    nodes.forEach((node) => {
+      dagreGraph.setNode(node.id, { width: 280, height: 120 })
+    })
+
+    // Add edges to dagre
+    edges.forEach((edge) => {
+      dagreGraph.setEdge(edge.source, edge.target)
+    })
+
+    // Calculate layout
+    dagre.layout(dagreGraph)
+
+    // Apply calculated positions to nodes
+    return nodes.map((node) => {
+      const nodeWithPosition = dagreGraph.node(node.id)
+      return {
+        ...node,
+        position: {
+          x: nodeWithPosition.x - 140, // Center the node
+          y: nodeWithPosition.y - 60,
+        },
+      }
+    })
+  }, [nodes, edges])
+
+  return { nodes: layoutedNodes, edges }
+}
