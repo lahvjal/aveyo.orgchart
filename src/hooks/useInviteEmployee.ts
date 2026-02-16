@@ -61,7 +61,7 @@ export function useInviteEmployee() {
         .eq('id', currentUser.id)
         .single()
 
-      const invitedByName = currentProfile?.full_name || 'Administrator'
+      const invitedByName = (currentProfile as any)?.full_name || 'Administrator'
 
       try {
         // Construct full name from first and last name
@@ -109,12 +109,12 @@ export function useInviteEmployee() {
         // Step 1.5: Update profile with additional fields (manager, department)
         if (data.managerId || data.departmentId) {
           console.log('useInviteEmployee: Updating profile with manager/department')
-          const { error: updateError } = await supabaseAdmin
+          const { error: updateError } = await (supabaseAdmin as any)
             .from('profiles')
             .update({
               manager_id: data.managerId || null,
               department_id: data.departmentId || null,
-            } as any)
+            })
             .eq('id', newUser.user.id)
 
           if (updateError) {
