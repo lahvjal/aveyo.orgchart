@@ -3,6 +3,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'noreply@send.aveyo.com'
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 
 interface InvitationEmailRequest {
   email: string
@@ -25,31 +27,72 @@ serve(async (req) => {
   }
 
   try {
-    // Log request for debugging
     console.log('Edge Function: Request received')
+    console.log('Edge Function: Environment check - SUPABASE_URL:', !!SUPABASE_URL, 'SUPABASE_ANON_KEY:', !!SUPABASE_ANON_KEY)
     
-    // Create Supabase client with the request context
-    // This automatically handles authentication from the request
+    // Get authorization header (try multiple case variations)
+    const authHeader = req.headers.get('Authorization') 
+                    || req.headers.get('authorization')
+                    || req.headers.get('AUTHORIZATION')
+    
+    console.log('Edge Function: Auth header present:', !!authHeader)
+    
+    if (!authHeader) {
+      console.error('Edge Function: No authorization header found')
+      console.log('Edge Function: Available headers:', Array.from(req.headers.keys()))
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { 
+          status: 401, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          } 
+        }
+      )
+    }
+    
+    // Create Supabase client with explicit auth header
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY,
       {
         global: {
           headers: {
-            Authorization: req.headers.get('Authorization') || req.headers.get('authorization') || '',
+            Authorization: authHeader,
           },
         },
       }
     )
 
-    console.log('Edge Function: Getting user from request')
+    console.log('Edge Function: Getting user from auth header')
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     
-    if (userError || !user) {
-      console.error('Edge Function: Failed to get user:', userError?.message)
+    if (userError) {
+      console.error('Edge Function: Error getting user:', userError.message, userError.status)
       return new Response(
-        JSON.stringify({ error: 'Unauthorized', details: userError?.message }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Unauthorized', details: userError.message }),
+        { 
+          status: 401, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          } 
+        }
+      )
+    }
+    
+    if (!user) {
+      console.error('Edge Function: No user found')
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized', details: 'No user found' }),
+        { 
+          status: 401, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          } 
+        }
       )
     }
 
@@ -65,10 +108,16 @@ serve(async (req) => {
     console.log('Edge Function: Profile fetched:', profile)
 
     if (!profile?.is_admin) {
-      console.error('Edge Function: User is not admin')
+      console.error('Edge Function: User is not admin, profile:', profile)
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
+        { 
+          status: 403, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          } 
+        }
       )
     }
 
@@ -159,7 +208,13 @@ serve(async (req) => {
       console.error('Resend API error:', error)
       return new Response(
         JSON.stringify({ error: 'Failed to send email', details: error }),
-        { status: 500, headers: { 'Content-Type': 'application/json' } }
+        { 
+          status: 500, 
+          headers: { 
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          } 
+        }
       )
     }
 
