@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useProfiles, useUpdateProfile } from '../../hooks/useProfile'
 import { useDepartments } from '../../lib/queries'
+import { useUserAuthStatus, useResendInvite, hasUserLoggedIn } from '../../hooks/useResendInvite'
 import type { Profile } from '../../types'
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
@@ -8,17 +9,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { getInitials } from '../../lib/utils'
-import { Edit2, Loader2, Shield, UserPlus, Info } from 'lucide-react'
+import { Edit2, Loader2, Shield, UserPlus, Info, Mail, Clock } from 'lucide-react'
 import { AddEmployeeDialog } from './AddEmployeeDialog'
 
 export function UserManagement() {
   const { data: profiles, isLoading } = useProfiles()
   const { data: departments } = useDepartments()
+  const { data: authStatusMap } = useUserAuthStatus()
   const updateProfile = useUpdateProfile()
+  const resendInvite = useResendInvite()
 
   const [editingUser, setEditingUser] = useState<Profile | null>(null)
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [departmentAutoFilled, setDepartmentAutoFilled] = useState(false)
+  const [resendingUserId, setResendingUserId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
     manager_id: '',
     department_id: '',
@@ -54,6 +58,17 @@ export function UserManagement() {
   const handleDepartmentChange = (value: string) => {
     setFormData(prev => ({ ...prev, department_id: value }))
     setDepartmentAutoFilled(false)
+  }
+
+  const handleResendInvite = async (profile: Profile) => {
+    setResendingUserId(profile.id)
+    const result = await resendInvite.mutateAsync(profile)
+    setResendingUserId(null)
+
+    if (result.success) {
+      // Show success feedback - you could add a toast notification here
+      console.log('Invitation resent successfully to', result.email)
+    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,50 +204,81 @@ export function UserManagement() {
             </form>
           ) : (
             <div className="space-y-2">
-              {profiles?.map((profile) => (
-                <div
-                  key={profile.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
-                >
-                  <div className="flex items-center gap-3 flex-1">
-                    <Avatar>
-                      {profile.profile_photo_url && (
-                        <AvatarImage src={profile.profile_photo_url} alt={profile.full_name} />
-                      )}
-                      <AvatarFallback>{getInitials(profile.full_name)}</AvatarFallback>
-                    </Avatar>
-                    
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium truncate">{profile.full_name}</p>
-                        {profile.is_admin && (
-                          <Badge variant="secondary">
-                            <Shield className="h-3 w-3 mr-1" />
-                            Admin
+              {profiles?.map((profile) => {
+                const hasLoggedIn = authStatusMap ? hasUserLoggedIn(profile.id, authStatusMap) : true
+                const isResending = resendingUserId === profile.id
+
+                return (
+                  <div
+                    key={profile.id}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <Avatar>
+                        {profile.profile_photo_url && (
+                          <AvatarImage src={profile.profile_photo_url} alt={profile.full_name} />
+                        )}
+                        <AvatarFallback>{getInitials(profile.full_name)}</AvatarFallback>
+                      </Avatar>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium truncate">{profile.full_name}</p>
+                          {profile.is_admin && (
+                            <Badge variant="secondary">
+                              <Shield className="h-3 w-3 mr-1" />
+                              Admin
+                            </Badge>
+                          )}
+                          {!hasLoggedIn && (
+                            <Badge variant="outline" className="border-yellow-500 text-yellow-700">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Pending
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">{profile.job_title}</p>
+                        {profile.department && (
+                          <Badge
+                            className="mt-1"
+                            style={{ backgroundColor: profile.department.color, color: 'white' }}
+                          >
+                            {profile.department.name}
                           </Badge>
                         )}
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">{profile.job_title}</p>
-                      {profile.department && (
-                        <Badge
-                          className="mt-1"
-                          style={{ backgroundColor: profile.department.color, color: 'white' }}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {!hasLoggedIn && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleResendInvite(profile)}
+                          disabled={isResending}
+                          title="Resend invitation email"
                         >
-                          {profile.department.name}
-                        </Badge>
+                          {isResending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <>
+                              <Mail className="h-4 w-4 mr-2" />
+                              Resend
+                            </>
+                          )}
+                        </Button>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(profile)}
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleEdit(profile)}
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
