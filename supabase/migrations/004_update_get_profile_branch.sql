@@ -1,4 +1,6 @@
--- Update get_profile_branch function to include new fields
+-- Drop and recreate get_profile_branch function to include new fields
+DROP FUNCTION IF EXISTS get_profile_branch(UUID);
+
 CREATE OR REPLACE FUNCTION get_profile_branch(user_id UUID)
 RETURNS TABLE (
   id UUID,
