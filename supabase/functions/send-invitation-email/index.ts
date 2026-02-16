@@ -27,38 +27,26 @@ serve(async (req) => {
   try {
     // Log request for debugging
     console.log('Edge Function: Request received')
-    console.log('Edge Function: Headers:', Object.fromEntries(req.headers.entries()))
     
-    // Verify authentication
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) {
-      console.error('Edge Function: Missing authorization header')
-      return new Response(
-        JSON.stringify({ error: 'Missing authorization header' }),
-        { status: 401, headers: { 'Content-Type': 'application/json' } }
-      )
-    }
-
-    console.log('Edge Function: Auth header found')
-    console.log('Edge Function: SUPABASE_URL:', Deno.env.get('SUPABASE_URL') ? 'set' : 'missing')
-    console.log('Edge Function: SUPABASE_ANON_KEY:', Deno.env.get('SUPABASE_ANON_KEY') ? 'set' : 'missing')
-
-    // Verify user is admin
+    // Create Supabase client with the request context
+    // This automatically handles authentication from the request
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_ANON_KEY') ?? '',
       {
         global: {
-          headers: { Authorization: authHeader },
+          headers: {
+            Authorization: req.headers.get('Authorization') || req.headers.get('authorization') || '',
+          },
         },
       }
     )
 
-    console.log('Edge Function: Getting user from auth header')
+    console.log('Edge Function: Getting user from request')
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
     
     if (userError || !user) {
-      console.error('Edge Function: Failed to get user:', userError)
+      console.error('Edge Function: Failed to get user:', userError?.message)
       return new Response(
         JSON.stringify({ error: 'Unauthorized', details: userError?.message }),
         { status: 401, headers: { 'Content-Type': 'application/json' } }
