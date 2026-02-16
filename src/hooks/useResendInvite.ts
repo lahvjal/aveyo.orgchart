@@ -49,11 +49,14 @@ export function useResendInvite() {
       try {
         // Generate a new magic link
         console.log('useResendInvite: Generating new magic link')
+        const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
+        console.log('useResendInvite: Using app URL:', appUrl)
+        
         const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
           type: 'magiclink',
           email: profile.email,
           options: {
-            redirectTo: `${import.meta.env.VITE_APP_URL}/dashboard`,
+            redirectTo: `${appUrl}/dashboard`,
           },
         })
 

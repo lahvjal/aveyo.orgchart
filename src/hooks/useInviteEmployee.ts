@@ -125,11 +125,14 @@ export function useInviteEmployee() {
 
         // Step 2: Generate magic link for password setup
         console.log('useInviteEmployee: Generating magic link')
+        const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
+        console.log('useInviteEmployee: Using app URL:', appUrl)
+        
         const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
           type: 'magiclink',
           email: data.email,
           options: {
-            redirectTo: `${import.meta.env.VITE_APP_URL}/dashboard`,
+            redirectTo: `${appUrl}/dashboard`,
           },
         })
 
