@@ -1,5 +1,5 @@
--- Drop and recreate get_profile_branch function to include new fields
-DROP FUNCTION IF EXISTS get_profile_branch(UUID);
+-- Drop function with CASCADE to remove dependent policies
+DROP FUNCTION IF EXISTS get_profile_branch(UUID) CASCADE;
 
 CREATE OR REPLACE FUNCTION get_profile_branch(user_id UUID)
 RETURNS TABLE (
@@ -48,3 +48,14 @@ BEGIN
   SELECT * FROM branch;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Recreate the policy that depends on this function
+DROP POLICY IF EXISTS "Users can view their branch positions" ON org_chart_positions;
+
+CREATE POLICY "Users can view their branch positions"
+  ON org_chart_positions FOR SELECT
+  USING (
+    profile_id IN (
+      SELECT id FROM get_profile_branch(auth.uid())
+    )
+  );
