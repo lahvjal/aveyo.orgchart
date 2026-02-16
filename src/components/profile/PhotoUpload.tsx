@@ -41,14 +41,14 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
     try {
       let fileToUpload = file
 
-      // Compress if larger than 5MB
-      if (file.size > 5 * 1024 * 1024) {
+      // Compress if larger than 2.5MB
+      if (file.size > 2.5 * 1024 * 1024) {
         setCompressing(true)
         console.log(`Original file size: ${formatFileSize(file.size)}`)
         
         fileToUpload = await compressImage(file, {
-          maxSizeMB: 5,
-          targetSizeMB: 4.5,
+          maxSizeMB: 2.5,
+          targetSizeMB: 2,
           maxWidthOrHeight: 2048,
         })
         

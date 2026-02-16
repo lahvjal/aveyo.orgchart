@@ -1,6 +1,6 @@
 /**
  * Image compression utility for profile photos
- * Compresses images larger than 5MB to approximately 4.5MB
+ * Compresses images larger than 2.5MB to approximately 2MB
  */
 
 interface CompressionOptions {
@@ -19,8 +19,8 @@ interface CompressionOptions {
 export async function compressImage(
   file: File,
   options: CompressionOptions = {
-    maxSizeMB: 5,
-    targetSizeMB: 4.5,
+    maxSizeMB: 2.5,
+    targetSizeMB: 2,
     maxWidthOrHeight: 2048,
   }
 ): Promise<File> {
