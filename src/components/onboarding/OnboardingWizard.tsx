@@ -1,13 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../ui/card'
+import { Card, CardContent, CardHeader } from '../ui/card'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
-import { useToast } from '../../hooks/use-toast'
-import { CheckCircle2, User, Lock, FileText } from 'lucide-react'
+import { CheckCircle2, User, Lock, FileText, AlertCircle } from 'lucide-react'
 import type { Profile } from '../../types'
 
 interface OnboardingWizardProps {
@@ -20,7 +19,7 @@ type Step = 'welcome' | 'password' | 'profile' | 'complete'
 export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps) {
   const [currentStep, setCurrentStep] = useState<Step>('welcome')
   const [loading, setLoading] = useState(false)
-  const { toast } = useToast()
+  const [error, setError] = useState('')
   const navigate = useNavigate()
 
   // Form state
@@ -31,76 +30,55 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
   const [location, setLocation] = useState(profile.location || '')
 
   const handleSetPassword = async () => {
+    setError('')
+    
     if (password.length < 6) {
-      toast({
-        title: 'Password too short',
-        description: 'Password must be at least 6 characters',
-        variant: 'destructive',
-      })
+      setError('Password must be at least 6 characters')
       return
     }
 
     if (password !== confirmPassword) {
-      toast({
-        title: 'Passwords do not match',
-        description: 'Please make sure both passwords are the same',
-        variant: 'destructive',
-      })
+      setError('Passwords do not match')
       return
     }
 
     setLoading(true)
     try {
-      const { error } = await supabase.auth.updateUser({
+      const { error: updateError } = await supabase.auth.updateUser({
         password: password,
       })
 
-      if (error) throw error
+      if (updateError) throw updateError
 
-      toast({
-        title: 'Password set successfully',
-        description: 'Your password has been updated',
-      })
       setCurrentStep('profile')
-    } catch (error) {
-      console.error('Error setting password:', error)
-      toast({
-        title: 'Failed to set password',
-        description: error instanceof Error ? error.message : 'Please try again',
-        variant: 'destructive',
-      })
+    } catch (err) {
+      console.error('Error setting password:', err)
+      setError(err instanceof Error ? err.message : 'Failed to set password. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
   const handleUpdateProfile = async () => {
+    setError('')
     setLoading(true)
     try {
-      const { error } = await supabase
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({
           bio,
           phone: phone || null,
           location: location || null,
           onboarding_completed: true,
-        })
+        } as any)
         .eq('id', profile.id)
 
-      if (error) throw error
+      if (updateError) throw updateError
 
-      toast({
-        title: 'Profile updated',
-        description: 'Your profile has been completed successfully',
-      })
       setCurrentStep('complete')
-    } catch (error) {
-      console.error('Error updating profile:', error)
-      toast({
-        title: 'Failed to update profile',
-        description: error instanceof Error ? error.message : 'Please try again',
-        variant: 'destructive',
-      })
+    } catch (err) {
+      console.error('Error updating profile:', err)
+      setError(err instanceof Error ? err.message : 'Failed to update profile. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -197,6 +175,13 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
               </div>
             </div>
 
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+                <AlertCircle className="h-4 w-4" />
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
+
             <div className="flex gap-3">
               <Button
                 variant="outline"
@@ -262,6 +247,13 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
                 />
               </div>
             </div>
+
+            {error && (
+              <div className="flex items-center gap-2 p-3 bg-destructive/10 text-destructive rounded-lg">
+                <AlertCircle className="h-4 w-4" />
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <Button
