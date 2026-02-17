@@ -25,9 +25,15 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
   // Form state
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
-  const [bio, setBio] = useState(profile.bio || '')
+  const [preferredName, setPreferredName] = useState(profile.preferred_name || '')
+  const [jobDescription, setJobDescription] = useState(profile.job_description || '')
   const [phone, setPhone] = useState(profile.phone || '')
   const [location, setLocation] = useState(profile.location || '')
+  const [socialLinks, setSocialLinks] = useState({
+    linkedin: profile.social_links?.linkedin || '',
+    instagram: profile.social_links?.instagram || '',
+    facebook: profile.social_links?.facebook || '',
+  })
 
   const handleSetPassword = async () => {
     setError('')
@@ -67,9 +73,11 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
         .from('profiles')
         // @ts-expect-error - Supabase type inference issue with newly added columns
         .update({
-          bio,
+          preferred_name: preferredName || null,
+          job_description: jobDescription || null,
           phone: phone || null,
           location: location || null,
+          social_links: socialLinks,
           onboarding_completed: true,
         })
         .eq('id', profile.id)
@@ -217,13 +225,23 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="bio">Bio</Label>
+                <Label htmlFor="preferredName">Nickname / Preferred Name (Optional)</Label>
+                <Input
+                  id="preferredName"
+                  value={preferredName}
+                  onChange={(e) => setPreferredName(e.target.value)}
+                  placeholder="What would you like to be called?"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="jobDescription">Job Description (Optional)</Label>
                 <Textarea
-                  id="bio"
-                  value={bio}
-                  onChange={(e) => setBio(e.target.value)}
-                  placeholder="Tell us about yourself, your role, and what you do..."
-                  rows={4}
+                  id="jobDescription"
+                  value={jobDescription}
+                  onChange={(e) => setJobDescription(e.target.value)}
+                  placeholder="Describe your role and responsibilities..."
+                  rows={3}
                 />
               </div>
 
@@ -246,6 +264,30 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="City, State or Remote"
                 />
+              </div>
+
+              <div className="space-y-3">
+                <Label>Social Links (Optional)</Label>
+                <div className="space-y-2">
+                  <Input
+                    id="linkedin"
+                    value={socialLinks.linkedin}
+                    onChange={(e) => setSocialLinks(prev => ({ ...prev, linkedin: e.target.value }))}
+                    placeholder="LinkedIn URL"
+                  />
+                  <Input
+                    id="instagram"
+                    value={socialLinks.instagram}
+                    onChange={(e) => setSocialLinks(prev => ({ ...prev, instagram: e.target.value }))}
+                    placeholder="Instagram URL"
+                  />
+                  <Input
+                    id="facebook"
+                    value={socialLinks.facebook}
+                    onChange={(e) => setSocialLinks(prev => ({ ...prev, facebook: e.target.value }))}
+                    placeholder="Facebook URL"
+                  />
+                </div>
               </div>
             </div>
 

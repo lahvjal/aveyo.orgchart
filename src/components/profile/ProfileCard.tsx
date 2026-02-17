@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader } from '../ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { getInitials, formatDate } from '../../lib/utils'
-import { Mail, Phone, MapPin, Calendar, Linkedin, Twitter, Github } from 'lucide-react'
+import { Mail, Phone, MapPin, Calendar, Linkedin, Instagram, Facebook } from 'lucide-react'
 
 interface ProfileCardProps {
   profile: Profile
@@ -91,24 +91,24 @@ export function ProfileCard({ profile, showContactInfo = true }: ProfileCardProp
                 <Linkedin className="h-5 w-5" />
               </a>
             )}
-            {profile.social_links.twitter && (
+            {profile.social_links.instagram && (
               <a
-                href={profile.social_links.twitter}
+                href={profile.social_links.instagram}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground"
               >
-                <Twitter className="h-5 w-5" />
+                <Instagram className="h-5 w-5" />
               </a>
             )}
-            {profile.social_links.github && (
+            {profile.social_links.facebook && (
               <a
-                href={profile.social_links.github}
+                href={profile.social_links.facebook}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-muted-foreground hover:text-foreground"
               >
-                <Github className="h-5 w-5" />
+                <Facebook className="h-5 w-5" />
               </a>
             )}
           </div>

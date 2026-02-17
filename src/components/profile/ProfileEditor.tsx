@@ -7,7 +7,7 @@ import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { PhotoUpload } from './PhotoUpload'
-import { Linkedin, Twitter, Github, Loader2 } from 'lucide-react'
+import { Linkedin, Instagram, Facebook, Loader2 } from 'lucide-react'
 
 interface ProfileEditorProps {
   profile: Profile
@@ -32,8 +32,8 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
     profile_photo_url: profile.profile_photo_url || '',
     social_links: {
       linkedin: profile.social_links?.linkedin || '',
-      twitter: profile.social_links?.twitter || '',
-      github: profile.social_links?.github || '',
+      instagram: profile.social_links?.instagram || '',
+      facebook: profile.social_links?.facebook || '',
     },
   })
 
@@ -200,36 +200,36 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="twitter" className="flex items-center gap-2">
-                <Twitter className="h-4 w-4" />
-                Twitter
+              <Label htmlFor="instagram" className="flex items-center gap-2">
+                <Instagram className="h-4 w-4" />
+                Instagram
               </Label>
               <Input
-                id="twitter"
+                id="instagram"
                 type="url"
-                value={formData.social_links.twitter}
+                value={formData.social_links.instagram}
                 onChange={(e) => setFormData(prev => ({
                   ...prev,
-                  social_links: { ...prev.social_links, twitter: e.target.value }
+                  social_links: { ...prev.social_links, instagram: e.target.value }
                 }))}
-                placeholder="https://twitter.com/username"
+                placeholder="https://instagram.com/username"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="github" className="flex items-center gap-2">
-                <Github className="h-4 w-4" />
-                GitHub
+              <Label htmlFor="facebook" className="flex items-center gap-2">
+                <Facebook className="h-4 w-4" />
+                Facebook
               </Label>
               <Input
-                id="github"
+                id="facebook"
                 type="url"
-                value={formData.social_links.github}
+                value={formData.social_links.facebook}
                 onChange={(e) => setFormData(prev => ({
                   ...prev,
-                  social_links: { ...prev.social_links, github: e.target.value }
+                  social_links: { ...prev.social_links, facebook: e.target.value }
                 }))}
-                placeholder="https://github.com/username"
+                placeholder="https://facebook.com/username"
               />
             </div>
           </div>

@@ -23,8 +23,8 @@ export interface Profile {
 
 export interface SocialLinks {
   linkedin?: string
-  twitter?: string
-  github?: string
+  instagram?: string
+  facebook?: string
 }
 
 export interface Department {
