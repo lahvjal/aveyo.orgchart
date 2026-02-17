@@ -15,6 +15,10 @@ export default function Dashboard() {
   const { data: currentProfile, isLoading: profileLoading } = useProfile()
   const { isAdmin, isLoading: permissionsLoading } = usePermissions()
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  
+  // Call all hooks at the top level - React Rules of Hooks
+  const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()
+  const { data: branchProfiles, isLoading: branchLoading, error: branchError } = useProfileBranch(user?.id)
 
   console.log('Dashboard: user:', user?.id)
   console.log('Dashboard: currentProfile:', currentProfile)
@@ -29,10 +33,6 @@ export default function Dashboard() {
   if (!profileLoading && needsOnboarding && currentProfile) {
     return <OnboardingWizard profile={currentProfile} onComplete={() => window.location.reload()} />
   }
-
-  // Admins see all profiles, users see their branch
-  const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()
-  const { data: branchProfiles, isLoading: branchLoading, error: branchError } = useProfileBranch(user?.id)
 
   console.log('Dashboard: allProfiles:', allProfiles, 'loading:', allProfilesLoading, 'error:', allProfilesError)
   console.log('Dashboard: branchProfiles:', branchProfiles, 'loading:', branchLoading, 'error:', branchError)
