@@ -276,35 +276,30 @@ export function useUpdateOrganizationSettings() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('Not authenticated')
 
-      // Try to update existing record
+      type SettingsRow = { id: string }
       const { data: existing } = await supabase
         .from('organization_settings')
         .select('id')
         .limit(1)
-        .single()
+        .maybeSingle()
 
-      if (existing) {
-        // Update existing
-        const { data, error } = await supabase
+      const existingRow = existing as SettingsRow | null
+      const payload = { logo_url: updates.logo_url, updated_by: user.id }
+
+      if (existingRow) {
+        const { data, error } = await (supabase as any)
           .from('organization_settings')
-          .update({
-            logo_url: updates.logo_url,
-            updated_by: user.id,
-          } as any)
-          .eq('id', existing.id)
+          .update(payload)
+          .eq('id', existingRow.id)
           .select()
           .single()
 
         if (error) throw error
         return data
       } else {
-        // Insert new
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('organization_settings')
-          .insert({
-            logo_url: updates.logo_url,
-            updated_by: user.id,
-          } as any)
+          .insert(payload)
           .select()
           .single()
 
