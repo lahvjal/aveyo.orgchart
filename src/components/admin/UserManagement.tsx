@@ -140,6 +140,17 @@ export function UserManagement() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="job_title">Job Title</Label>
+                <Input
+                  id="job_title"
+                  type="text"
+                  value={formData.job_title}
+                  onChange={(e) => setFormData(prev => ({ ...prev, job_title: e.target.value }))}
+                  placeholder="e.g. Software Engineer"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="manager">Manager</Label>
                 <select
                   id="manager"
