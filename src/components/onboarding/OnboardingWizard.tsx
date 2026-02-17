@@ -63,21 +63,14 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
     setError('')
     setLoading(true)
     try {
-      const updateData: {
-        bio: string
-        phone: string | null
-        location: string | null
-        onboarding_completed: boolean
-      } = {
-        bio,
-        phone: phone || null,
-        location: location || null,
-        onboarding_completed: true,
-      }
-
       const { error: updateError } = await supabase
         .from('profiles')
-        .update(updateData)
+        .update({
+          bio,
+          phone: phone || null,
+          location: location || null,
+          onboarding_completed: true,
+        })
         .eq('id', profile.id)
 
       if (updateError) throw updateError

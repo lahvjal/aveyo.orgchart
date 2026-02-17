@@ -14,8 +14,10 @@ export interface Database {
           id: string
           email: string
           full_name: string
+          preferred_name: string | null
           job_title: string
           job_description: string | null
+          bio: string | null
           start_date: string
           profile_photo_url: string | null
           phone: string | null
@@ -24,6 +26,7 @@ export interface Database {
           manager_id: string | null
           social_links: Json | null
           is_admin: boolean
+          onboarding_completed: boolean
           created_at: string
           updated_at: string
         }
@@ -31,8 +34,10 @@ export interface Database {
           id: string
           email: string
           full_name: string
+          preferred_name?: string | null
           job_title: string
           job_description?: string | null
+          bio?: string | null
           start_date: string
           profile_photo_url?: string | null
           phone?: string | null
@@ -41,6 +46,7 @@ export interface Database {
           manager_id?: string | null
           social_links?: Json | null
           is_admin?: boolean
+          onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -48,8 +54,10 @@ export interface Database {
           id?: string
           email?: string
           full_name?: string
+          preferred_name?: string | null
           job_title?: string
           job_description?: string | null
+          bio?: string | null
           start_date?: string
           profile_photo_url?: string | null
           phone?: string | null
@@ -58,6 +66,7 @@ export interface Database {
           manager_id?: string | null
           social_links?: Json | null
           is_admin?: boolean
+          onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
         }
@@ -174,8 +183,10 @@ export interface Database {
           id: string
           email: string
           full_name: string
+          preferred_name: string | null
           job_title: string
           job_description: string | null
+          bio: string | null
           start_date: string
           profile_photo_url: string | null
           phone: string | null
@@ -184,6 +195,7 @@ export interface Database {
           manager_id: string | null
           social_links: Json | null
           is_admin: boolean
+          onboarding_completed: boolean
           created_at: string
           updated_at: string
         }[]
