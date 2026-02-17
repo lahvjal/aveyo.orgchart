@@ -10,11 +10,13 @@ import { Button } from '../ui/button'
 interface EmployeeSearchProps {
   profiles: Profile[]
   onSelectEmployee: (profileId: string) => void
+  currentUserDepartmentId?: string
 }
 
-export function EmployeeSearch({ profiles, onSelectEmployee }: EmployeeSearchProps) {
+export function EmployeeSearch({ profiles, onSelectEmployee, currentUserDepartmentId }: EmployeeSearchProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null)
+  // Default to the current user's department if provided
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(currentUserDepartmentId || null)
 
   const departments = useMemo(() => {
     const depts = new Map<string, { id: string; name: string; color: string }>()
@@ -64,29 +66,32 @@ export function EmployeeSearch({ profiles, onSelectEmployee }: EmployeeSearchPro
       </div>
 
       {departments.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          <Badge
-            variant={selectedDepartment === null ? 'default' : 'outline'}
-            className="cursor-pointer"
-            onClick={() => setSelectedDepartment(null)}
-          >
-            All
-          </Badge>
-          {departments.map((dept) => (
+        <div>
+          <p className="text-xs text-muted-foreground mb-2 font-medium">Filter by Department</p>
+          <div className="flex flex-wrap gap-2">
             <Badge
-              key={dept.id}
-              variant={selectedDepartment === dept.id ? 'default' : 'outline'}
+              variant={selectedDepartment === null ? 'default' : 'outline'}
               className="cursor-pointer"
-              style={
-                selectedDepartment === dept.id
-                  ? { backgroundColor: dept.color, color: 'white' }
-                  : undefined
-              }
-              onClick={() => setSelectedDepartment(dept.id)}
+              onClick={() => setSelectedDepartment(null)}
             >
-              {dept.name}
+              All Departments
             </Badge>
-          ))}
+            {departments.map((dept) => (
+              <Badge
+                key={dept.id}
+                variant={selectedDepartment === dept.id ? 'default' : 'outline'}
+                className="cursor-pointer"
+                style={
+                  selectedDepartment === dept.id
+                    ? { backgroundColor: dept.color, color: 'white' }
+                    : undefined
+                }
+                onClick={() => setSelectedDepartment(dept.id)}
+              >
+                {dept.name}
+              </Badge>
+            ))}
+          </div>
         </div>
       )}
 

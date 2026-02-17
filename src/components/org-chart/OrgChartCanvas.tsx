@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useMemo, useEffect, useRef } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -6,6 +6,8 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   addEdge,
+  useReactFlow,
+  ReactFlowProvider,
 } from 'reactflow'
 import type { NodeTypes, Connection } from 'reactflow'
 import 'reactflow/dist/style.css'
@@ -18,6 +20,7 @@ interface OrgChartCanvasProps {
   profiles: Profile[]
   isAdmin: boolean
   currentUserId?: string
+  currentUserDepartmentId?: string
   onNodeClick?: (profileId: string) => void
 }
 
@@ -25,10 +28,11 @@ const nodeTypes: NodeTypes = {
   employee: EmployeeNode,
 }
 
-export function OrgChartCanvas({ 
+function OrgChartCanvasInner({ 
   profiles, 
   isAdmin, 
   currentUserId,
+  currentUserDepartmentId,
   onNodeClick 
 }: OrgChartCanvasProps) {
   const { nodes: initialNodes, edges: initialEdges } = useOrgChart(
@@ -40,12 +44,39 @@ export function OrgChartCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const updatePosition = useUpdatePosition()
+  const { fitView } = useReactFlow()
+  const hasInitiallyFocused = useRef(false)
 
   // Update nodes when profiles change
   useMemo(() => {
     setNodes(initialNodes)
     setEdges(initialEdges)
   }, [initialNodes, initialEdges, setNodes, setEdges])
+
+  // Focus on user's department on initial load
+  useEffect(() => {
+    if (!hasInitiallyFocused.current && nodes.length > 0 && currentUserDepartmentId) {
+      // Find nodes in the user's department
+      const departmentNodeIds = nodes
+        .filter((node) => {
+          const profile = node.data?.profile as Profile
+          return profile?.department_id === currentUserDepartmentId
+        })
+        .map((node) => node.id)
+
+      if (departmentNodeIds.length > 0) {
+        // Focus on the user's department nodes with a slight delay to ensure layout is ready
+        setTimeout(() => {
+          fitView({
+            nodes: departmentNodeIds.map((id) => ({ id })),
+            padding: 0.2,
+            duration: 800,
+          })
+        }, 100)
+      }
+      hasInitiallyFocused.current = true
+    }
+  }, [nodes, currentUserDepartmentId, fitView])
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -90,7 +121,6 @@ export function OrgChartCanvas({
         nodesDraggable={isAdmin}
         nodesConnectable={false}
         elementsSelectable={true}
-        fitView
         minZoom={0.1}
         maxZoom={1.5}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
@@ -106,5 +136,14 @@ export function OrgChartCanvas({
         />
       </ReactFlow>
     </div>
+  )
+}
+
+// Wrap with ReactFlowProvider to use useReactFlow hook
+export function OrgChartCanvas(props: OrgChartCanvasProps) {
+  return (
+    <ReactFlowProvider>
+      <OrgChartCanvasInner {...props} />
+    </ReactFlowProvider>
   )
 }

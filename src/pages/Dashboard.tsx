@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useProfiles, useProfileBranch, useProfile } from '../hooks/useProfile'
+import { useProfiles, useProfile } from '../hooks/useProfile'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuth } from '../hooks/useAuth'
 import { OrgChartCanvas } from '../components/org-chart/OrgChartCanvas'
@@ -16,9 +16,8 @@ export default function Dashboard() {
   const { isAdmin, isLoading: permissionsLoading } = usePermissions()
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   
-  // Call all hooks at the top level - React Rules of Hooks
+  // All users can now view all profiles - the org chart is accessible to everyone
   const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()
-  const { data: branchProfiles, isLoading: branchLoading, error: branchError } = useProfileBranch(user?.id)
 
   console.log('Dashboard: user:', user?.id)
   console.log('Dashboard: currentProfile:', currentProfile)
@@ -35,11 +34,10 @@ export default function Dashboard() {
   }
 
   console.log('Dashboard: allProfiles:', allProfiles, 'loading:', allProfilesLoading, 'error:', allProfilesError)
-  console.log('Dashboard: branchProfiles:', branchProfiles, 'loading:', branchLoading, 'error:', branchError)
 
-  const profiles = isAdmin ? allProfiles : branchProfiles
+  const profiles = allProfiles
 
-  const isLoading = permissionsLoading || (isAdmin ? allProfilesLoading : branchLoading)
+  const isLoading = permissionsLoading || allProfilesLoading
 
   console.log('Dashboard: Final - profiles:', profiles, 'isLoading:', isLoading)
 
@@ -77,15 +75,14 @@ export default function Dashboard() {
         <div className="mb-6">
           <h2 className="text-2xl font-bold mb-2">Organization Chart</h2>
           <p className="text-sm text-muted-foreground">
-            {isAdmin 
-              ? `Managing ${profiles.length} employees` 
-              : `Viewing your team (${profiles.length} members)`}
+            Browse and search {profiles.length} employees across all departments
           </p>
         </div>
 
         <EmployeeSearch
           profiles={profiles}
           onSelectEmployee={setSelectedProfileId}
+          currentUserDepartmentId={currentProfile?.department_id}
         />
       </div>
 
@@ -95,6 +92,7 @@ export default function Dashboard() {
           profiles={profiles}
           isAdmin={isAdmin}
           currentUserId={user?.id}
+          currentUserDepartmentId={currentProfile?.department_id}
           onNodeClick={setSelectedProfileId}
         />
 
