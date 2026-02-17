@@ -5,6 +5,7 @@ import { useUserAuthStatus, useResendInvite, hasUserLoggedIn } from '../../hooks
 import type { Profile } from '../../types'
 import { Button } from '../ui/button'
 import { Label } from '../ui/label'
+import { Textarea } from '../ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
@@ -26,6 +27,7 @@ export function UserManagement() {
   const [formData, setFormData] = useState({
     manager_id: '',
     department_id: '',
+    job_description: '',
     is_admin: false,
   })
 
@@ -35,6 +37,7 @@ export function UserManagement() {
     setFormData({
       manager_id: profile.manager_id || '',
       department_id: profile.department_id || '',
+      job_description: profile.job_description || '',
       is_admin: profile.is_admin,
     })
   }
@@ -79,6 +82,7 @@ export function UserManagement() {
       id: editingUser.id,
       manager_id: formData.manager_id || null,
       department_id: formData.department_id || null,
+      job_description: formData.job_description || null,
       is_admin: formData.is_admin,
     })
 
@@ -174,6 +178,18 @@ export function UserManagement() {
                     <span>Department automatically updated from new manager. You can change it if needed.</span>
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="job_description">Job Description</Label>
+                <Textarea
+                  id="job_description"
+                  value={formData.job_description}
+                  onChange={(e) => setFormData(prev => ({ ...prev, job_description: e.target.value }))}
+                  placeholder="Describe the employee's role and responsibilities..."
+                  rows={4}
+                  className="resize-none"
+                />
               </div>
 
               <div className="flex items-center gap-2">
