@@ -230,3 +230,90 @@ export async function uploadProfilePhoto(file: File, userId: string): Promise<st
 
   return publicUrl
 }
+
+// Organization Logo Upload
+export async function uploadOrganizationLogo(file: File): Promise<string> {
+  const fileExt = file.name.split('.').pop()
+  const fileName = `logo.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage
+    .from('organization-logos')
+    .upload(fileName, file, {
+      upsert: true,
+    })
+
+  if (uploadError) throw uploadError
+
+  const { data: { publicUrl } } = supabase.storage
+    .from('organization-logos')
+    .getPublicUrl(fileName)
+
+  return publicUrl
+}
+
+// Organization Settings
+export function useOrganizationSettings() {
+  return useQuery({
+    queryKey: ['organization-settings'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('organization_settings')
+        .select('*')
+        .limit(1)
+        .single()
+
+      if (error && error.code !== 'PGRST116') throw error // PGRST116 = no rows returned
+      return data as { id: string; logo_url: string | null; updated_by: string; updated_at: string; created_at: string } | null
+    },
+  })
+}
+
+export function useUpdateOrganizationSettings() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (updates: { logo_url: string | null }) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      // Try to update existing record
+      const { data: existing } = await supabase
+        .from('organization_settings')
+        .select('id')
+        .limit(1)
+        .single()
+
+      if (existing) {
+        // Update existing
+        const { data, error } = await supabase
+          .from('organization_settings')
+          .update({
+            logo_url: updates.logo_url,
+            updated_by: user.id,
+          } as any)
+          .eq('id', existing.id)
+          .select()
+          .single()
+
+        if (error) throw error
+        return data
+      } else {
+        // Insert new
+        const { data, error } = await supabase
+          .from('organization_settings')
+          .insert({
+            logo_url: updates.logo_url,
+            updated_by: user.id,
+          } as any)
+          .select()
+          .single()
+
+        if (error) throw error
+        return data
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-settings'] })
+    },
+  })
+}

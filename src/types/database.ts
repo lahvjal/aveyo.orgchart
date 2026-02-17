@@ -178,6 +178,29 @@ export interface Database {
           created_at?: string
         }
       }
+      organization_settings: {
+        Row: {
+          id: string
+          logo_url: string | null
+          updated_by: string
+          updated_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          logo_url?: string | null
+          updated_by: string
+          updated_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          logo_url?: string | null
+          updated_by?: string
+          updated_at?: string
+          created_at?: string
+        }
+      }
     }
     Functions: {
       get_profile_branch: {

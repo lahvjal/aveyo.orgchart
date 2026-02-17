@@ -2,6 +2,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { useProfile } from '../../hooks/useProfile'
 import { usePermissions } from '../../hooks/usePermissions'
+import { useOrganizationSettings } from '../../lib/queries'
 import { Button } from '../ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { getInitials } from '../../lib/utils'
@@ -11,6 +12,7 @@ export function Header() {
   const { signOut } = useAuth()
   const { data: profile } = useProfile()
   const { isAdmin, isManager } = usePermissions()
+  const { data: orgSettings } = useOrganizationSettings()
   const navigate = useNavigate()
 
   console.log('Header: profile:', profile)
@@ -25,8 +27,16 @@ export function Header() {
     <header className="border-b bg-white">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-6">
-          <Link to="/dashboard" className="font-bold text-xl">
-            OrgChart
+          <Link to="/dashboard" className="flex items-center">
+            {orgSettings?.logo_url ? (
+              <img
+                src={orgSettings.logo_url}
+                alt="Organization logo"
+                className="h-8 object-contain"
+              />
+            ) : (
+              <span className="font-bold text-xl">OrgChart</span>
+            )}
           </Link>
           <nav className="hidden md:flex gap-4">
             <Link

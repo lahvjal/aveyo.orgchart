@@ -4,10 +4,11 @@ import { Navigate } from 'react-router-dom'
 import { DepartmentManager } from '../components/admin/DepartmentManager'
 import { UserManagement } from '../components/admin/UserManagement'
 import { ShareLinkManager } from '../components/admin/ShareLinkManager'
+import { LogoUpload } from '../components/admin/LogoUpload'
 import { Button } from '../components/ui/button'
-import { Building2, Users, Share2 } from 'lucide-react'
+import { Building2, Users, Share2, Palette } from 'lucide-react'
 
-type Tab = 'departments' | 'users' | 'sharing'
+type Tab = 'departments' | 'users' | 'sharing' | 'branding'
 
 export default function AdminPanel() {
   const { isAdmin, isLoading } = usePermissions()
@@ -56,11 +57,20 @@ export default function AdminPanel() {
           <Share2 className="mr-2 h-4 w-4" />
           Sharing
         </Button>
+        <Button
+          variant={activeTab === 'branding' ? 'default' : 'ghost'}
+          onClick={() => setActiveTab('branding')}
+          className="rounded-b-none"
+        >
+          <Palette className="mr-2 h-4 w-4" />
+          Branding
+        </Button>
       </div>
 
       {activeTab === 'users' && <UserManagement />}
       {activeTab === 'departments' && <DepartmentManager />}
       {activeTab === 'sharing' && <ShareLinkManager />}
+      {activeTab === 'branding' && <LogoUpload />}
     </div>
   )
 }
