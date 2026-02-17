@@ -82,43 +82,48 @@ serve(async (req) => {
 
     console.log('Sending invitation email to:', email)
 
+    // Logo as base64 (logo-icon.svg) for reliable display in email clients
+    const logoDataUri = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9Ijc5IiB2aWV3Qm94PSIwIDAgMTAwIDc5IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDBfMzYxNl8yNzAyMykiPgo8cGF0aCBkPSJNOTkuOTk5OCA3OUg4MS4wODY2Qzc0LjQ5MzkgNzkgNjguNzQxNyA3NC41MTE4IDY3LjEyNjEgNjguMTEwNkw1MC4xMzA0IDAuOTUxMTcySDY4Ljg0NzdDNzUuNDI0MSAwLjk1MTE3MiA4MS4xNjgyIDUuNDE0ODQgODIuODAwMSAxMS43OTk3TDk5Ljk5MTcgNzlIOTkuOTk5OFoiIGZpbGw9IiMyMTIxMjAiLz4KPHBhdGggZD0iTTAgNzkuMDAwNUgzMi41MjI4QzM3Ljc2OTMgNzkuMDAwNSA0Mi42MDc3IDc2LjEzOTIgNDUuMTM3MSA3MS41MzY2TDYwLjc3MDIgNDMuMTExM0gyOC40MjY5QzIzLjIwNSA0My4xMTEzIDE4LjM5MSA0NS45NDgxIDE1Ljg0NTMgNTAuNTE4MUwwIDc5LjAwMDVaIiBmaWxsPSIjMjEyMTIwIi8+CjxwYXRoIGQ9Ik0wLjI2OTA0MyAzNi44NDA0SDIxLjg4MjlDMjcuMTI5NCAzNi44NDA0IDMxLjk2NzggMzMuOTc5IDM0LjQ5NzIgMjkuMzc2NEw1MC4xMzAzIDAuOTUxMTcySDI4LjY5NTlDMjMuNDc0IDAuOTUxMTcyIDE4LjY2IDMuNzg3OTcgMTYuMTE0MyA4LjM1NzkyTDAuMjY5MDQzIDM2Ljg0MDRaIiBmaWxsPSIjMjEyMTIwIi8+CjwvZz4KPGRlZnM+CjxjbGlwUGF0aCBpZD0iY2xpcDBfMzYxNl8yNzAyMyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iNzguMDQ4OCIgZmlsbD0id2hpdGUiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMC45NTExNzIpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg=='
+
     // Send email via Resend
     const emailHtml = `
       <!DOCTYPE html>
       <html>
         <head>
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #111; background: #fff; margin: 0; padding: 0; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
-            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; }
-            .button { display: inline-block; background: #667eea; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-weight: bold; }
-            .info-box { background: white; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #667eea; }
-            .footer { text-align: center; color: #6b7280; font-size: 12px; margin-top: 30px; }
-            .warning { color: #dc2626; font-size: 13px; margin-top: 10px; }
+            .header { background: #000; color: #fff; padding: 32px 30px; text-align: center; border-radius: 8px 8px 0 0; }
+            .header img { display: block; margin: 0 auto 16px; height: 48px; width: auto; filter: brightness(0) invert(1); }
+            .header h1 { margin: 0; font-size: 20px; font-weight: 600; }
+            .content { background: #fff; padding: 30px; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 8px 8px; }
+            .button { display: inline-block; background: #000; color: #fff !important; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-weight: bold; }
+            .info-box { background: #f5f5f5; padding: 20px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #000; }
+            .footer { text-align: center; color: #666; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e5e5; }
+            .warning { color: #b91c1c; font-size: 13px; margin-top: 10px; }
           </style>
         </head>
         <body>
           <div class="container">
             <div class="header">
-              <h1>You're Invited! 🎉</h1>
+              <img src="${logoDataUri}" alt="Aveyo" width="60" height="47" />
+              <h1>You've been invited to Aveyo's OrgChart App</h1>
             </div>
             <div class="content">
-              <h2>Hi ${fullName},</h2>
+              <h2 style="color: #111; margin-top: 0;">Hi ${fullName},</h2>
               
-              <p>${invitedBy} has invited you to join the organization chart system as <strong>${jobTitle}</strong>.</p>
+              <p>${invitedBy} has invited you to join the organization chart as <strong>${jobTitle}</strong>.</p>
 
               <div class="info-box">
-                <p><strong>Your Account Details:</strong></p>
-                <p>📧 Email: ${email}<br>
-                💼 Job Title: ${jobTitle}</p>
+                <p style="margin: 0 0 8px;"><strong>Your account details</strong></p>
+                <p style="margin: 0;">Email: ${email}<br>Job title: ${jobTitle}</p>
               </div>
 
               <p>Click the button below to access your account and set up your password:</p>
               
-              <a href="${magicLink}" class="button">Access My Account</a>
+              <a href="${magicLink}" class="button">Access my account</a>
 
-              <p class="warning">⚠️ This link expires in 24 hours for security reasons.</p>
+              <p class="warning">This link expires in 24 hours for security reasons.</p>
 
               <p><strong>What's next?</strong></p>
               <ul>
@@ -130,11 +135,11 @@ serve(async (req) => {
 
               <p>If you have any questions or didn't expect this invitation, please contact your administrator.</p>
               
-              <p>Best regards,<br>The Team</p>
+              <p>Best regards,<br>The Aveyo Team</p>
             </div>
             <div class="footer">
-              <p>This is an automated invitation from your organization chart system.</p>
-              <p>If the button doesn't work, copy and paste this link into your browser:<br>
+              <p style="margin: 0 0 8px;">This is an automated invitation from Aveyo's OrgChart App.</p>
+              <p style="margin: 0;">If the button doesn't work, copy and paste this link into your browser:<br>
               <span style="word-break: break-all; font-size: 11px;">${magicLink}</span></p>
             </div>
           </div>
@@ -151,7 +156,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: FROM_EMAIL,
         to: [email],
-        subject: `🎉 You've been invited to join the team as ${jobTitle}`,
+        subject: `You've been invited to Aveyo's OrgChart App – ${jobTitle}`,
         html: emailHtml,
       }),
     })

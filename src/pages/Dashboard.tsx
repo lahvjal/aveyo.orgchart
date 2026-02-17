@@ -128,7 +128,7 @@ export default function Dashboard() {
         {/* Selected profile detail */}
         {selectedProfile && (
           <div className="absolute top-4 right-4 w-96 max-h-[calc(100vh-8rem)] overflow-y-auto">
-            <div className="relative">
+            <div className="relative bg-white">
               <Button
                 variant="ghost"
                 size="icon"
