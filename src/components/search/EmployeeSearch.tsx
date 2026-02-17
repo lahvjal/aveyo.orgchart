@@ -60,7 +60,7 @@ export function EmployeeSearch({
   }, [profiles, searchQuery, selectedDepartment])
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 h-full">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
@@ -116,7 +116,7 @@ export function EmployeeSearch({
         </div>
       )}
 
-      <div className="space-y-2 max-h-96 overflow-y-auto">
+      <div className="space-y-2 h-full overflow-y-auto">
         {filteredProfiles.length === 0 ? (
           <p className="text-center text-muted-foreground py-4">No employees found</p>
         ) : (
