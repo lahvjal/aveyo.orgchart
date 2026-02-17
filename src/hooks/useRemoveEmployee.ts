@@ -47,7 +47,7 @@ export function useRemoveEmployee() {
         .eq('id', currentUser.id)
         .single()
 
-      if (!currentProfile?.is_admin) {
+      if (!currentProfile || !(currentProfile as any).is_admin) {
         return {
           success: false,
           error: 'Only administrators can remove employees',
