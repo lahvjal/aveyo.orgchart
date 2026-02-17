@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { sendPasswordResetEmail } from '../lib/notifications'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
@@ -11,17 +11,16 @@ export default function ForgotPassword() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
   const [loading, setLoading] = useState(false)
-  const { resetPassword } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
 
-    const { error } = await resetPassword(email)
+    const result = await sendPasswordResetEmail(email)
 
-    if (error) {
-      setError(error.message)
+    if (!result.success) {
+      setError(result.error ?? 'Something went wrong')
       setLoading(false)
     } else {
       setSuccess(true)

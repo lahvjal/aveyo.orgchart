@@ -4,6 +4,15 @@
 
 We need to deploy the `send-invitation-email` Edge Function to Supabase so it can handle email sending without CORS issues.
 
+## Edge Function URLs (this project)
+
+| Function | URL |
+|----------|-----|
+| Invitation email | `https://semzdcsumfnmjnhzhtst.supabase.co/functions/v1/send-invitation-email` |
+| Password reset email | `https://semzdcsumfnmjnhzhtst.supabase.co/functions/v1/send-password-reset-email` |
+
+The app calls these via `supabase.functions.invoke('function-name', ...)` using `VITE_SUPABASE_URL`.
+
 ## Prerequisites
 
 ✅ Supabase CLI installed (you have version 2.22.12)  
@@ -147,6 +156,7 @@ supabase functions list
 Should show:
 ```
 send-invitation-email
+send-password-reset-email
 ```
 
 ### View Function Logs (for debugging)
@@ -173,8 +183,9 @@ supabase link --project-ref semzdcsumfnmjnhzhtst
 supabase secrets set RESEND_API_KEY=re_zJ12TZbm_Gjs6y2ewcCFJtZoSjEnsoVWv
 supabase secrets set FROM_EMAIL=noreply@send.aveyo.com
 
-# 4. Deploy function
+# 4. Deploy functions
 supabase functions deploy send-invitation-email --no-verify-jwt
+supabase functions deploy send-password-reset-email --no-verify-jwt
 
 # 5. Verify deployment
 supabase functions list
@@ -187,6 +198,7 @@ supabase functions list
 Once deployed:
 - ✅ Invitation emails will work
 - ✅ Resend invitations will work
+- ✅ Forgot password / reset emails (Resend) will work
 - ✅ No more CORS errors
 - ✅ Works on both localhost and production
 

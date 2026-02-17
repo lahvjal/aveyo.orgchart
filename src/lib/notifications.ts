@@ -372,3 +372,33 @@ export async function sendEmployeeInvitationEmail(
       error: error instanceof Error ? error.message : 'Failed to send invitation email' }
   }
 }
+
+/**
+ * Request a password reset email. Sends a magic link via Resend (Edge Function).
+ * No auth required - call from ForgotPassword page.
+ */
+export async function sendPasswordResetEmail(email: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const appUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '')
+    const redirectTo = appUrl ? `${appUrl}/reset-password` : undefined
+
+    const { data, error } = await supabase.functions.invoke('send-password-reset-email', {
+      body: { email: email.trim(), redirectTo },
+    })
+
+    if (error) {
+      return { success: false, error: error.message || 'Failed to send reset email' }
+    }
+
+    if (data?.error) {
+      return { success: false, error: data.error }
+    }
+
+    return { success: true }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send reset email',
+    }
+  }
+}
