@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Profile } from '../../types'
 import { useUpdateProfile } from '../../hooks/useProfile'
 import { Button } from '../ui/button'
@@ -20,6 +20,17 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
   const defaultFirstName = nameParts[0] || ''
   const defaultLastName = nameParts.slice(1).join(' ') || ''
 
+  // Helper function to format date for HTML date input (YYYY-MM-DD)
+  const formatDateForInput = (date: string | null | undefined): string => {
+    if (!date) return ''
+    // If already in YYYY-MM-DD format, return as is
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
+    // Otherwise, parse and format
+    const d = new Date(date)
+    if (isNaN(d.getTime())) return ''
+    return d.toISOString().split('T')[0]
+  }
+
   const [formData, setFormData] = useState({
     firstName: defaultFirstName,
     lastName: defaultLastName,
@@ -28,7 +39,7 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
     job_description: profile.job_description || '',
     phone: profile.phone || '',
     location: profile.location || '',
-    start_date: profile.start_date,
+    start_date: formatDateForInput(profile.start_date),
     profile_photo_url: profile.profile_photo_url || '',
     social_links: {
       linkedin: profile.social_links?.linkedin || '',
@@ -36,6 +47,43 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
       facebook: profile.social_links?.facebook || '',
     },
   })
+
+  // Update formData when profile prop changes (e.g., after refetch)
+  // This ensures the form reflects the latest data from the database
+  useEffect(() => {
+    const nameParts = profile.full_name.split(' ')
+    const firstName = nameParts[0] || ''
+    const lastName = nameParts.slice(1).join(' ') || ''
+    
+    setFormData(prev => {
+      // Only update if the profile data actually changed
+      // This prevents unnecessary re-renders while still syncing after save
+      const newStartDate = formatDateForInput(profile.start_date)
+      if (prev.start_date === newStartDate && 
+          prev.firstName === firstName && 
+          prev.lastName === lastName &&
+          prev.job_title === profile.job_title) {
+        return prev // No changes, return previous state
+      }
+      
+      return {
+        firstName,
+        lastName,
+        preferred_name: profile.preferred_name || '',
+        job_title: profile.job_title,
+        job_description: profile.job_description || '',
+        phone: profile.phone || '',
+        location: profile.location || '',
+        start_date: newStartDate,
+        profile_photo_url: profile.profile_photo_url || '',
+        social_links: {
+          linkedin: profile.social_links?.linkedin || '',
+          instagram: profile.social_links?.instagram || '',
+          facebook: profile.social_links?.facebook || '',
+        },
+      }
+    })
+  }, [profile.id, profile.start_date, profile.full_name, profile.preferred_name, profile.job_title, profile.job_description, profile.phone, profile.location, profile.profile_photo_url, profile.social_links])
 
   const updateProfile = useUpdateProfile()
 
@@ -45,6 +93,9 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
     // Combine first and last name
     const fullName = `${formData.firstName} ${formData.lastName}`.trim()
 
+    // Ensure start_date is in YYYY-MM-DD format
+    const formattedStartDate = formatDateForInput(formData.start_date)
+
     await updateProfile.mutateAsync({
       id: profile.id,
       full_name: fullName,
@@ -53,7 +104,7 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
       job_description: formData.job_description || null,
       phone: formData.phone || null,
       location: formData.location || null,
-      start_date: formData.start_date,
+      start_date: formattedStartDate,
       profile_photo_url: formData.profile_photo_url || null,
       social_links: formData.social_links,
     } as any)

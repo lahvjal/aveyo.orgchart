@@ -4,6 +4,7 @@ import { useDepartments } from '../../lib/queries'
 import { useUserAuthStatus, useResendInvite, hasUserLoggedIn } from '../../hooks/useResendInvite'
 import type { Profile } from '../../types'
 import { Button } from '../ui/button'
+import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
@@ -25,6 +26,7 @@ export function UserManagement() {
   const [departmentAutoFilled, setDepartmentAutoFilled] = useState(false)
   const [resendingUserId, setResendingUserId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
+    job_title: '',
     manager_id: '',
     department_id: '',
     job_description: '',
@@ -35,6 +37,7 @@ export function UserManagement() {
     setEditingUser(profile)
     setDepartmentAutoFilled(false)
     setFormData({
+      job_title: profile.job_title,
       manager_id: profile.manager_id || '',
       department_id: profile.department_id || '',
       job_description: profile.job_description || '',
@@ -80,6 +83,7 @@ export function UserManagement() {
 
     await updateProfile.mutateAsync({
       id: editingUser.id,
+      job_title: formData.job_title,
       manager_id: formData.manager_id || null,
       department_id: formData.department_id || null,
       job_description: formData.job_description || null,
