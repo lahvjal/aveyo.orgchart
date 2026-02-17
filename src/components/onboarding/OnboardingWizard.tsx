@@ -8,6 +8,7 @@ import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { CheckCircle2, User, Lock, FileText, AlertCircle } from 'lucide-react'
 import type { Profile } from '../../types'
+import type { Database } from '../../types/database'
 
 interface OnboardingWizardProps {
   profile: Profile
@@ -63,14 +64,18 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
     setError('')
     setLoading(true)
     try {
+      type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
+      
+      const updateData: ProfileUpdate = {
+        bio,
+        phone: phone || null,
+        location: location || null,
+        onboarding_completed: true,
+      }
+
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({
-          bio,
-          phone: phone || null,
-          location: location || null,
-          onboarding_completed: true,
-        })
+        .update(updateData)
         .eq('id', profile.id)
 
       if (updateError) throw updateError
