@@ -82,7 +82,7 @@ export default function Dashboard() {
         <EmployeeSearch
           profiles={profiles}
           onSelectEmployee={setSelectedProfileId}
-          currentUserDepartmentId={currentProfile?.department_id}
+          currentUserDepartmentId={currentProfile?.department_id || undefined}
         />
       </div>
 
@@ -92,7 +92,7 @@ export default function Dashboard() {
           profiles={profiles}
           isAdmin={isAdmin}
           currentUserId={user?.id}
-          currentUserDepartmentId={currentProfile?.department_id}
+          currentUserDepartmentId={currentProfile?.department_id || undefined}
           onNodeClick={setSelectedProfileId}
         />
 
