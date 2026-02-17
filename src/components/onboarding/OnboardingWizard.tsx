@@ -63,9 +63,9 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
     setError('')
     setLoading(true)
     try {
-      // @ts-ignore - Type inference issue with Supabase update
       const { error: updateError } = await supabase
         .from('profiles')
+        // @ts-expect-error - Supabase type inference issue with newly added columns
         .update({
           bio,
           phone: phone || null,
