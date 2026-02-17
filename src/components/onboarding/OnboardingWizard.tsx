@@ -64,19 +64,16 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
     setError('')
     setLoading(true)
     try {
-      type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
-      
-      const updateData: ProfileUpdate = {
-        bio,
-        phone: phone || null,
-        location: location || null,
-        onboarding_completed: true,
-      }
-
-      const { error: updateError } = await supabase
+      // Type assertion to work around Supabase type inference issue
+      const { error: updateError } = await (supabase
         .from('profiles')
-        .update(updateData)
-        .eq('id', profile.id)
+        .update({
+          bio,
+          phone: phone || null,
+          location: location || null,
+          onboarding_completed: true,
+        } as any)
+        .eq('id', profile.id))
 
       if (updateError) throw updateError
 
