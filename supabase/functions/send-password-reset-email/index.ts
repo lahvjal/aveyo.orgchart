@@ -44,13 +44,15 @@ serve(async (req) => {
       )
     }
 
-    const resetRedirectTo = redirectTo || `${APP_URL}/reset-password`
-    if (!APP_URL && !redirectTo) {
+    let base = redirectTo || APP_URL
+    if (!base) {
       return new Response(
         JSON.stringify({ error: 'APP_URL or redirectTo is required' }),
         { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
       )
     }
+    base = base.replace(/\/+$/, '')
+    const resetRedirectTo = base.endsWith('/reset-password') ? base : `${base}/reset-password`
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 

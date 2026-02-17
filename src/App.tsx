@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { Layout } from './components/layout/Layout'
+import { RecoveryRedirect } from './components/RecoveryRedirect'
 import Login from './pages/Login'
 import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
@@ -77,7 +78,7 @@ function App() {
             }
           />
           
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<RecoveryRedirect />} />
         </Routes>
       </BrowserRouter>
       <ReactQueryDevtools initialIsOpen={false} />
