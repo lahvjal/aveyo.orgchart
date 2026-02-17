@@ -4,6 +4,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { getInitials, formatDate } from '../../lib/utils'
 import { Mail, Phone, MapPin, Calendar, Linkedin, Instagram, Facebook } from 'lucide-react'
+import { usePermissions } from '../../hooks/usePermissions'
+import { useProfile } from '../../hooks/useProfile'
 
 interface ProfileCardProps {
   profile: Profile
@@ -11,6 +13,14 @@ interface ProfileCardProps {
 }
 
 export function ProfileCard({ profile, showContactInfo = true }: ProfileCardProps) {
+  const { isAdmin, isManager, getTeamMembers } = usePermissions()
+  const { data: currentProfile } = useProfile()
+  const teamMembers = getTeamMembers()
+  // Admins can see all phone numbers, users can see their own, or managers can see their team members' phone numbers
+  const canViewPhone = 
+    isAdmin ||
+    currentProfile?.id === profile.id || 
+    (isManager && teamMembers.some(member => member.id === profile.id))
   return (
     <Card>
       <CardHeader>
@@ -56,7 +66,7 @@ export function ProfileCard({ profile, showContactInfo = true }: ProfileCardProp
               </a>
             </div>
 
-            {profile.phone && (
+            {profile.phone && canViewPhone && (
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <a href={`tel:${profile.phone}`} className="hover:underline">
