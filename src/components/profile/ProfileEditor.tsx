@@ -20,15 +20,21 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
   const defaultFirstName = nameParts[0] || ''
   const defaultLastName = nameParts.slice(1).join(' ') || ''
 
-  // Helper function to format date for HTML date input (YYYY-MM-DD)
+  // Helper function to format date for HTML date input (YYYY-MM-DD).
+  // Uses only the date part to avoid timezone shifting (off-by-one day).
   const formatDateForInput = (date: string | null | undefined): string => {
     if (!date) return ''
-    // If already in YYYY-MM-DD format, return as is
-    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) return date
-    // Otherwise, parse and format
+    const str = String(date).trim()
+    // Already YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str
+    // Supabase/ISO often returns YYYY-MM-DDTHH:mm:ss or with Z — use date part only
+    if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10)
     const d = new Date(date)
     if (isNaN(d.getTime())) return ''
-    return d.toISOString().split('T')[0]
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
   }
 
   const [formData, setFormData] = useState({
@@ -40,6 +46,7 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
     phone: profile.phone || '',
     location: profile.location || '',
     start_date: formatDateForInput(profile.start_date),
+    birthday: formatDateForInput(profile.birthday),
     profile_photo_url: profile.profile_photo_url || '',
     social_links: {
       linkedin: profile.social_links?.linkedin || '',
@@ -59,13 +66,15 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
       // Only update if the profile data actually changed
       // This prevents unnecessary re-renders while still syncing after save
       const newStartDate = formatDateForInput(profile.start_date)
-      if (prev.start_date === newStartDate && 
-          prev.firstName === firstName && 
+      const newBirthday = formatDateForInput(profile.birthday)
+      if (prev.start_date === newStartDate &&
+          prev.birthday === newBirthday &&
+          prev.firstName === firstName &&
           prev.lastName === lastName &&
           prev.job_title === profile.job_title) {
         return prev // No changes, return previous state
       }
-      
+
       return {
         firstName,
         lastName,
@@ -75,6 +84,7 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
         phone: profile.phone || '',
         location: profile.location || '',
         start_date: newStartDate,
+        birthday: formatDateForInput(profile.birthday),
         profile_photo_url: profile.profile_photo_url || '',
         social_links: {
           linkedin: profile.social_links?.linkedin || '',
@@ -83,7 +93,7 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
         },
       }
     })
-  }, [profile.id, profile.start_date, profile.full_name, profile.preferred_name, profile.job_title, profile.job_description, profile.phone, profile.location, profile.profile_photo_url, profile.social_links])
+  }, [profile.id, profile.start_date, profile.birthday, profile.full_name, profile.preferred_name, profile.job_title, profile.job_description, profile.phone, profile.location, profile.profile_photo_url, profile.social_links])
 
   const updateProfile = useUpdateProfile()
 
@@ -93,8 +103,10 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
     // Combine first and last name
     const fullName = `${formData.firstName} ${formData.lastName}`.trim()
 
-    // Ensure start_date is in YYYY-MM-DD format
-    const formattedStartDate = formatDateForInput(formData.start_date)
+    // Format dates consistently - extract YYYY-MM-DD to avoid timezone issues
+    // start_date is required, so use form value or fall back to existing profile value
+    const formattedStartDate = formData.start_date ? formatDateForInput(formData.start_date) : formatDateForInput(profile.start_date)
+    const formattedBirthday = formData.birthday ? formatDateForInput(formData.birthday) : null
 
     await updateProfile.mutateAsync({
       id: profile.id,
@@ -105,6 +117,7 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
       phone: formData.phone || null,
       location: formData.location || null,
       start_date: formattedStartDate,
+      birthday: formattedBirthday,
       profile_photo_url: formData.profile_photo_url || null,
       social_links: formData.social_links,
     } as any)
@@ -194,6 +207,16 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
                 value={formData.start_date}
                 onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
                 required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="birthday">Birthday</Label>
+              <Input
+                id="birthday"
+                type="date"
+                value={formData.birthday}
+                onChange={(e) => setFormData(prev => ({ ...prev, birthday: e.target.value }))}
               />
             </div>
 

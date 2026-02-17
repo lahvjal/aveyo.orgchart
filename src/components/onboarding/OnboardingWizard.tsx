@@ -29,6 +29,9 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
   const [jobDescription, setJobDescription] = useState(profile.job_description || '')
   const [phone, setPhone] = useState(profile.phone || '')
   const [location, setLocation] = useState(profile.location || '')
+  const [birthday, setBirthday] = useState(
+    profile.birthday ? (typeof profile.birthday === 'string' && profile.birthday.length >= 10 ? profile.birthday.slice(0, 10) : '') : ''
+  )
   const [socialLinks, setSocialLinks] = useState({
     linkedin: profile.social_links?.linkedin || '',
     instagram: profile.social_links?.instagram || '',
@@ -77,6 +80,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
           job_description: jobDescription || null,
           phone: phone || null,
           location: location || null,
+          birthday: birthday || null,
           social_links: socialLinks,
           onboarding_completed: true,
         })
@@ -263,6 +267,16 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   placeholder="City, State or Remote"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="birthday">Birthday (Optional)</Label>
+                <Input
+                  id="birthday"
+                  type="date"
+                  value={birthday}
+                  onChange={(e) => setBirthday(e.target.value)}
                 />
               </div>
 

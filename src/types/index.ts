@@ -7,6 +7,7 @@ export interface Profile {
   job_description: string | null
   bio?: string | null
   start_date: string
+  birthday?: string | null
   profile_photo_url: string | null
   phone: string | null
   location: string | null

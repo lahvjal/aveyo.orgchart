@@ -2,8 +2,8 @@ import type { Profile } from '../../types'
 import { Card, CardContent, CardHeader } from '../ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
-import { getInitials, formatDate } from '../../lib/utils'
-import { Mail, Phone, MapPin, Calendar, Linkedin, Instagram, Facebook } from 'lucide-react'
+import { getInitials, formatDate, formatDateOnly } from '../../lib/utils'
+import { Mail, Phone, MapPin, Calendar, Cake, Linkedin, Instagram, Facebook } from 'lucide-react'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useProfile } from '../../hooks/useProfile'
 
@@ -84,8 +84,15 @@ export function ProfileCard({ profile, showContactInfo = true }: ProfileCardProp
 
             <div className="flex items-center gap-2 text-sm">
               <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span>Started {formatDate(profile.start_date)}</span>
+              <span>Started {formatDateOnly(profile.start_date)}</span>
             </div>
+
+            {profile.birthday && (
+              <div className="flex items-center gap-2 text-sm">
+                <Cake className="h-4 w-4 text-muted-foreground" />
+                <span>Birthday {formatDateOnly(profile.birthday)}</span>
+              </div>
+            )}
           </div>
         )}
 
