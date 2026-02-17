@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useProfiles, useUpdateProfile } from '../../hooks/useProfile'
 import { useDepartments } from '../../lib/queries'
 import { useUserAuthStatus, useResendInvite, hasUserLoggedIn } from '../../hooks/useResendInvite'
+import { usePermissions } from '../../hooks/usePermissions'
+import { useProfile } from '../../hooks/useProfile'
 import type { Profile } from '../../types'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -11,15 +13,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { getInitials } from '../../lib/utils'
-import { Edit2, Loader2, Shield, UserPlus, Info, Mail, Clock, Users } from 'lucide-react'
-import { AddEmployeeDialog } from './AddEmployeeDialog'
+import { Edit2, Loader2, UserPlus, Info, Mail, Clock } from 'lucide-react'
+import { ManagerAddEmployeeDialog } from './ManagerAddEmployeeDialog'
 
-export function UserManagement() {
-  const { data: profiles, isLoading } = useProfiles()
+export function ManagerUserManagement() {
+  const { data: allProfiles, isLoading } = useProfiles()
   const { data: departments } = useDepartments()
   const { data: authStatusMap } = useUserAuthStatus()
   const updateProfile = useUpdateProfile()
   const resendInvite = useResendInvite()
+  const { getTeamMembers } = usePermissions()
+  const { data: currentManager } = useProfile()
 
   const [editingUser, setEditingUser] = useState<Profile | null>(null)
   const [showInviteDialog, setShowInviteDialog] = useState(false)
@@ -30,9 +34,13 @@ export function UserManagement() {
     manager_id: '',
     department_id: '',
     job_description: '',
-    is_admin: false,
-    is_manager: false,
   })
+
+  // Filter to show only team members
+  const teamMembers = useMemo(() => {
+    if (!allProfiles || !currentManager) return []
+    return getTeamMembers() || []
+  }, [allProfiles, currentManager, getTeamMembers])
 
   const handleEdit = (profile: Profile) => {
     setEditingUser(profile)
@@ -42,26 +50,19 @@ export function UserManagement() {
       manager_id: profile.manager_id || '',
       department_id: profile.department_id || '',
       job_description: profile.job_description || '',
-      is_admin: profile.is_admin,
-      is_manager: profile.is_manager || false,
     })
   }
 
-  // Auto-update department when manager changes
+  // Auto-update department when manager changes (though manager shouldn't change for managers)
   useEffect(() => {
-    if (editingUser && formData.manager_id && profiles) {
-      const selectedManager = profiles.find(p => p.id === formData.manager_id)
+    if (editingUser && formData.manager_id && allProfiles) {
+      const selectedManager = allProfiles.find(p => p.id === formData.manager_id)
       if (selectedManager?.department_id && selectedManager.department_id !== formData.department_id) {
         setFormData(prev => ({ ...prev, department_id: selectedManager.department_id || '' }))
         setDepartmentAutoFilled(true)
       }
     }
-  }, [formData.manager_id, profiles, editingUser])
-
-  const handleManagerChange = (value: string) => {
-    setFormData(prev => ({ ...prev, manager_id: value }))
-    setDepartmentAutoFilled(false)
-  }
+  }, [formData.manager_id, allProfiles, editingUser])
 
   const handleDepartmentChange = (value: string) => {
     setFormData(prev => ({ ...prev, department_id: value }))
@@ -74,23 +75,20 @@ export function UserManagement() {
     setResendingUserId(null)
 
     if (result.success) {
-      // Show success feedback - you could add a toast notification here
       console.log('Invitation resent successfully to', result.email)
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!editingUser) return
+    if (!editingUser || !currentManager) return
 
     await updateProfile.mutateAsync({
       id: editingUser.id,
       job_title: formData.job_title,
-      manager_id: formData.manager_id || null,
+      manager_id: currentManager.id, // Always keep the current manager as manager
       department_id: formData.department_id || null,
       job_description: formData.job_description || null,
-      is_admin: formData.is_admin,
-      is_manager: formData.is_manager,
     })
 
     setEditingUser(null)
@@ -101,11 +99,12 @@ export function UserManagement() {
   }
 
   if (isLoading) {
-    return <div>Loading users...</div>
+    return <div>Loading team members...</div>
   }
 
-  // Filter out the current editing user from potential managers
-  const potentialManagers = profiles?.filter((p) => p.id !== editingUser?.id) || []
+  if (!currentManager) {
+    return <div>Loading...</div>
+  }
 
   return (
     <div className="space-y-6">
@@ -113,21 +112,26 @@ export function UserManagement() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>User Management</CardTitle>
+              <CardTitle>Team Management</CardTitle>
               <CardDescription>
-                Manage user roles, managers, and departments
+                Manage your team members ({teamMembers.length} {teamMembers.length === 1 ? 'member' : 'members'})
               </CardDescription>
             </div>
             {!editingUser && (
               <Button onClick={() => setShowInviteDialog(true)}>
                 <UserPlus className="mr-2 h-4 w-4" />
-                Invite Employee
+                Invite Team Member
               </Button>
             )}
           </div>
         </CardHeader>
         <CardContent>
-          {editingUser ? (
+          {teamMembers.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>You don't have any team members yet.</p>
+              <p className="text-sm mt-2">Click "Invite Team Member" to add someone to your team.</p>
+            </div>
+          ) : editingUser ? (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="flex items-center gap-3 mb-4 p-3 bg-muted rounded-lg">
                 <Avatar>
@@ -155,19 +159,16 @@ export function UserManagement() {
 
               <div className="space-y-2">
                 <Label htmlFor="manager">Manager</Label>
-                <select
+                <Input
                   id="manager"
-                  value={formData.manager_id}
-                  onChange={(e) => handleManagerChange(e.target.value)}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <option value="">No Manager</option>
-                  {potentialManagers.map((profile) => (
-                    <option key={profile.id} value={profile.id}>
-                      {profile.full_name} - {profile.job_title}
-                    </option>
-                  ))}
-                </select>
+                  type="text"
+                  value={currentManager.full_name}
+                  disabled
+                  className="bg-muted cursor-not-allowed"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Team members report to you. This cannot be changed.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -193,7 +194,7 @@ export function UserManagement() {
                 {departmentAutoFilled && (
                   <div className="flex items-start gap-2 text-xs text-muted-foreground">
                     <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                    <span>Department automatically updated from new manager. You can change it if needed.</span>
+                    <span>Department automatically updated from manager. You can change it if needed.</span>
                   </div>
                 )}
               </div>
@@ -210,35 +211,6 @@ export function UserManagement() {
                 />
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is_admin"
-                    checked={formData.is_admin}
-                    onChange={(e) => setFormData(prev => ({ ...prev, is_admin: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <Label htmlFor="is_admin" className="flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    Administrator
-                  </Label>
-                </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is_manager"
-                    checked={formData.is_manager}
-                    onChange={(e) => setFormData(prev => ({ ...prev, is_manager: e.target.checked }))}
-                    className="h-4 w-4 rounded border-gray-300"
-                  />
-                  <Label htmlFor="is_manager" className="flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Manager
-                  </Label>
-                </div>
-              </div>
-
               <div className="flex gap-2">
                 <Button type="submit" disabled={updateProfile.isPending}>
                   {updateProfile.isPending && (
@@ -253,7 +225,7 @@ export function UserManagement() {
             </form>
           ) : (
             <div className="space-y-2">
-              {profiles?.map((profile) => {
+              {teamMembers.map((profile) => {
                 const hasLoggedIn = authStatusMap ? hasUserLoggedIn(profile.id, authStatusMap) : true
                 const isResending = resendingUserId === profile.id
 
@@ -273,18 +245,6 @@ export function UserManagement() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-medium truncate">{profile.full_name}</p>
-                          {profile.is_admin && (
-                            <Badge variant="secondary">
-                              <Shield className="h-3 w-3 mr-1" />
-                              Admin
-                            </Badge>
-                          )}
-                          {profile.is_manager && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200">
-                              <Users className="h-3 w-3 mr-1" />
-                              Manager
-                            </Badge>
-                          )}
                           {!hasLoggedIn && (
                             <Badge variant="outline" className="border-yellow-500 text-yellow-700">
                               <Clock className="h-3 w-3 mr-1" />
@@ -339,7 +299,7 @@ export function UserManagement() {
         </CardContent>
       </Card>
 
-      <AddEmployeeDialog
+      <ManagerAddEmployeeDialog
         open={showInviteDialog}
         onOpenChange={setShowInviteDialog}
       />

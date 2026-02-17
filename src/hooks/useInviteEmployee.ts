@@ -11,6 +11,7 @@ interface InviteEmployeeData {
   managerId?: string
   departmentId?: string
   startDate?: string
+  managerMode?: boolean // When true, managerId must be set and user must be a manager
 }
 
 interface InviteEmployeeResult {
@@ -54,14 +55,32 @@ export function useInviteEmployee() {
         }
       }
 
-      // Get current user's profile for the "invited by" name
+      // Get current user's profile for the "invited by" name and permission check
       const { data: currentProfile } = await supabase
         .from('profiles')
-        .select('full_name')
+        .select('full_name, is_admin, is_manager')
         .eq('id', currentUser.id)
         .single()
 
       const invitedByName = (currentProfile as any)?.full_name || 'Administrator'
+      const isAdmin = (currentProfile as any)?.is_admin || false
+      const isManager = (currentProfile as any)?.is_manager || false
+
+      // Validate manager mode permissions
+      if (data.managerMode) {
+        if (!isManager && !isAdmin) {
+          return {
+            success: false,
+            error: 'You do not have permission to invite team members',
+          }
+        }
+        if (!data.managerId || data.managerId !== currentUser.id) {
+          return {
+            success: false,
+            error: 'Manager ID must be set to your user ID in manager mode',
+          }
+        }
+      }
 
       try {
         // Construct full name from first and last name

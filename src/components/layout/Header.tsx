@@ -10,7 +10,7 @@ import { LogOut } from 'lucide-react'
 export function Header() {
   const { signOut } = useAuth()
   const { data: profile } = useProfile()
-  const { isAdmin } = usePermissions()
+  const { isAdmin, isManager } = usePermissions()
   const navigate = useNavigate()
 
   console.log('Header: profile:', profile)
@@ -41,6 +41,14 @@ export function Header() {
             >
               My Profile
             </Link>
+            {isManager && (
+              <Link
+                to="/manager"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                Manager Panel
+              </Link>
+            )}
             {isAdmin && (
               <Link
                 to="/admin"

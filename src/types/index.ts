@@ -14,6 +14,7 @@ export interface Profile {
   manager_id: string | null
   social_links: SocialLinks | null
   is_admin: boolean
+  is_manager?: boolean
   onboarding_completed?: boolean
   created_at: string
   updated_at: string

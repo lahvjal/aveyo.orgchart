@@ -26,6 +26,7 @@ export interface Database {
           manager_id: string | null
           social_links: Json | null
           is_admin: boolean
+          is_manager: boolean
           onboarding_completed: boolean
           created_at: string
           updated_at: string
@@ -46,6 +47,7 @@ export interface Database {
           manager_id?: string | null
           social_links?: Json | null
           is_admin?: boolean
+          is_manager?: boolean
           onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
@@ -66,6 +68,7 @@ export interface Database {
           manager_id?: string | null
           social_links?: Json | null
           is_admin?: boolean
+          is_manager?: boolean
           onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
@@ -195,6 +198,30 @@ export interface Database {
           manager_id: string | null
           social_links: Json | null
           is_admin: boolean
+          is_manager: boolean
+          onboarding_completed: boolean
+          created_at: string
+          updated_at: string
+        }[]
+      }
+      get_manager_team: {
+        Args: { p_manager_id: string }
+        Returns: {
+          id: string
+          email: string
+          full_name: string
+          preferred_name: string | null
+          job_title: string
+          job_description: string | null
+          start_date: string
+          profile_photo_url: string | null
+          phone: string | null
+          location: string | null
+          department_id: string | null
+          manager_id: string | null
+          social_links: Json | null
+          is_admin: boolean
+          is_manager: boolean
           onboarding_completed: boolean
           created_at: string
           updated_at: string

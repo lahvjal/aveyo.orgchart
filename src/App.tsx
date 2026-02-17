@@ -9,6 +9,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import Dashboard from './pages/Dashboard'
 import Profile from './pages/Profile'
 import AdminPanel from './pages/AdminPanel'
+import ManagerPanel from './pages/ManagerPanel'
 import PublicShare from './pages/PublicShare'
 
 const queryClient = new QueryClient({
@@ -58,6 +59,17 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <AdminPanel />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/manager"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <ManagerPanel />
                 </Layout>
               </ProtectedRoute>
             }
