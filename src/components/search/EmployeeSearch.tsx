@@ -11,12 +11,28 @@ interface EmployeeSearchProps {
   profiles: Profile[]
   onSelectEmployee: (profileId: string) => void
   currentUserDepartmentId?: string
+  selectedDepartment?: string | null
+  onDepartmentChange?: (departmentId: string | null) => void
 }
 
-export function EmployeeSearch({ profiles, onSelectEmployee, currentUserDepartmentId }: EmployeeSearchProps) {
+export function EmployeeSearch({ 
+  profiles, 
+  onSelectEmployee, 
+  currentUserDepartmentId,
+  selectedDepartment: propSelectedDepartment,
+  onDepartmentChange
+}: EmployeeSearchProps) {
   const [searchQuery, setSearchQuery] = useState('')
-  // Default to the current user's department if provided
-  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(currentUserDepartmentId || null)
+  // Use prop if explicitly provided (even if null), otherwise default to the current user's department
+  const selectedDepartment = propSelectedDepartment !== undefined 
+    ? propSelectedDepartment 
+    : (currentUserDepartmentId || null)
+  
+  const handleDepartmentChange = (departmentId: string | null) => {
+    if (onDepartmentChange) {
+      onDepartmentChange(departmentId)
+    }
+  }
 
   const departments = useMemo(() => {
     const depts = new Map<string, { id: string; name: string; color: string }>()
@@ -72,7 +88,12 @@ export function EmployeeSearch({ profiles, onSelectEmployee, currentUserDepartme
             <Badge
               variant={selectedDepartment === null ? 'default' : 'outline'}
               className="cursor-pointer"
-              onClick={() => setSelectedDepartment(null)}
+              style={
+                selectedDepartment === null
+                  ? { backgroundColor: 'hsl(var(--primary))', color: 'white' }
+                  : undefined
+              }
+              onClick={() => handleDepartmentChange(null)}
             >
               All Departments
             </Badge>
@@ -86,7 +107,7 @@ export function EmployeeSearch({ profiles, onSelectEmployee, currentUserDepartme
                     ? { backgroundColor: dept.color, color: 'white' }
                     : undefined
                 }
-                onClick={() => setSelectedDepartment(dept.id)}
+                onClick={() => handleDepartmentChange(dept.id)}
               >
                 {dept.name}
               </Badge>

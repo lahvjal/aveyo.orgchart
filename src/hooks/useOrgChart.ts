@@ -17,6 +17,9 @@ export function useOrgChart(profiles: Profile[], isAdmin: boolean, currentUserId
       visibleProfiles = profiles
     }
 
+    // Create a set of visible profile IDs for quick lookup
+    const visibleProfileIds = new Set(visibleProfiles.map((p) => p.id))
+
     // Create nodes
     const nodes: Node[] = visibleProfiles.map((profile) => ({
       id: profile.id,
@@ -26,8 +29,9 @@ export function useOrgChart(profiles: Profile[], isAdmin: boolean, currentUserId
     }))
 
     // Create edges (connections between manager and reports)
+    // Only create edges where both the manager and employee are in the visible set
     const edges: Edge[] = visibleProfiles
-      .filter((profile) => profile.manager_id)
+      .filter((profile) => profile.manager_id && visibleProfileIds.has(profile.manager_id))
       .map((profile) => ({
         id: `${profile.manager_id}-${profile.id}`,
         source: profile.manager_id!,

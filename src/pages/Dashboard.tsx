@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useProfiles, useProfile } from '../hooks/useProfile'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuth } from '../hooks/useAuth'
@@ -15,9 +15,20 @@ export default function Dashboard() {
   const { data: currentProfile, isLoading: profileLoading } = useProfile()
   const { isAdmin, isLoading: permissionsLoading } = usePermissions()
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  // Default to the current user's department if provided
+  const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null)
+  const hasInitializedDepartment = useRef(false)
   
   // All users can now view all profiles - the org chart is accessible to everyone
   const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()
+
+  // Set initial department filter when currentProfile loads (only once)
+  useEffect(() => {
+    if (!hasInitializedDepartment.current && currentProfile?.department_id) {
+      setSelectedDepartment(currentProfile.department_id)
+      hasInitializedDepartment.current = true
+    }
+  }, [currentProfile?.department_id])
 
   console.log('Dashboard: user:', user?.id)
   console.log('Dashboard: currentProfile:', currentProfile)
@@ -35,13 +46,18 @@ export default function Dashboard() {
 
   console.log('Dashboard: allProfiles:', allProfiles, 'loading:', allProfilesLoading, 'error:', allProfilesError)
 
-  const profiles = allProfiles
+  // Filter profiles by selected department
+  const profiles = useMemo(() => {
+    if (!allProfiles) return []
+    if (!selectedDepartment) return allProfiles
+    return allProfiles.filter((profile) => profile.department_id === selectedDepartment)
+  }, [allProfiles, selectedDepartment])
 
   const isLoading = permissionsLoading || allProfilesLoading
 
   console.log('Dashboard: Final - profiles:', profiles, 'isLoading:', isLoading)
 
-  const selectedProfile = profiles?.find((p) => p.id === selectedProfileId)
+  const selectedProfile = allProfiles?.find((p) => p.id === selectedProfileId)
 
   if (isLoading) {
     return (
@@ -53,7 +69,7 @@ export default function Dashboard() {
     )
   }
 
-  if (!profiles || profiles.length === 0) {
+  if (!allProfiles || allProfiles.length === 0) {
     return (
       <div className="container mx-auto px-4 py-8">
         <Card className="p-8 text-center">
@@ -75,26 +91,39 @@ export default function Dashboard() {
         <div className="mb-6">
           <h2 className="text-2xl font-bold mb-2">Organization Chart</h2>
           <p className="text-sm text-muted-foreground">
-            Browse and search {profiles.length} employees across all departments
+            Browse and search {selectedDepartment ? profiles.length : allProfiles?.length || 0} {selectedDepartment ? 'employees' : 'employees across all departments'}
           </p>
         </div>
 
         <EmployeeSearch
-          profiles={profiles}
+          profiles={allProfiles || []}
           onSelectEmployee={setSelectedProfileId}
           currentUserDepartmentId={currentProfile?.department_id || undefined}
+          selectedDepartment={selectedDepartment}
+          onDepartmentChange={setSelectedDepartment}
         />
       </div>
 
       {/* Main content - Org Chart */}
       <div className="flex-1 relative">
-        <OrgChartCanvas
-          profiles={profiles}
-          isAdmin={isAdmin}
-          currentUserId={user?.id}
-          currentUserDepartmentId={currentProfile?.department_id || undefined}
-          onNodeClick={setSelectedProfileId}
-        />
+        {profiles.length === 0 && selectedDepartment ? (
+          <div className="flex items-center justify-center h-full">
+            <Card className="p-8 text-center">
+              <h2 className="text-2xl font-bold mb-4">No Employees in Selected Department</h2>
+              <p className="text-muted-foreground mb-4">
+                Try selecting a different department or view all departments.
+              </p>
+            </Card>
+          </div>
+        ) : (
+          <OrgChartCanvas
+            profiles={profiles}
+            isAdmin={isAdmin}
+            currentUserId={user?.id}
+            currentUserDepartmentId={currentProfile?.department_id || undefined}
+            onNodeClick={setSelectedProfileId}
+          />
+        )}
 
         {/* Selected profile detail */}
         {selectedProfile && (

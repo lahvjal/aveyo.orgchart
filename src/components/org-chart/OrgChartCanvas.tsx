@@ -48,7 +48,7 @@ function OrgChartCanvasInner({
   const hasInitiallyFocused = useRef(false)
 
   // Update nodes when profiles change
-  useMemo(() => {
+  useEffect(() => {
     setNodes(initialNodes)
     setEdges(initialEdges)
   }, [initialNodes, initialEdges, setNodes, setEdges])
