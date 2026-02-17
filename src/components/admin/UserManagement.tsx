@@ -11,8 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { getInitials } from '../../lib/utils'
-import { Edit2, Loader2, Shield, UserPlus, Info, Mail, Clock, Users } from 'lucide-react'
+import { Edit2, Loader2, Shield, UserPlus, Info, Mail, Clock, Users, Trash2 } from 'lucide-react'
 import { AddEmployeeDialog } from './AddEmployeeDialog'
+import { RemoveEmployeeDialog } from './RemoveEmployeeDialog'
 
 export function UserManagement() {
   const { data: profiles, isLoading } = useProfiles()
@@ -23,6 +24,7 @@ export function UserManagement() {
 
   const [editingUser, setEditingUser] = useState<Profile | null>(null)
   const [showInviteDialog, setShowInviteDialog] = useState(false)
+  const [employeeToRemove, setEmployeeToRemove] = useState<Profile | null>(null)
   const [departmentAutoFilled, setDepartmentAutoFilled] = useState(false)
   const [resendingUserId, setResendingUserId] = useState<string | null>(null)
   const [formData, setFormData] = useState({
@@ -327,8 +329,18 @@ export function UserManagement() {
                         variant="ghost"
                         size="icon"
                         onClick={() => handleEdit(profile)}
+                        title="Edit employee"
                       >
                         <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setEmployeeToRemove(profile)}
+                        title="Remove employee"
+                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -342,6 +354,12 @@ export function UserManagement() {
       <AddEmployeeDialog
         open={showInviteDialog}
         onOpenChange={setShowInviteDialog}
+      />
+
+      <RemoveEmployeeDialog
+        open={!!employeeToRemove}
+        onOpenChange={(open) => !open && setEmployeeToRemove(null)}
+        employee={employeeToRemove}
       />
     </div>
   )
