@@ -5,6 +5,7 @@ import { Button } from '../ui/button'
 import { getInitials } from '../../lib/utils'
 import { uploadProfilePhoto } from '../../lib/queries'
 import { compressImage, formatFileSize } from '../../lib/imageCompression'
+import { ImageCropDialog } from './ImageCropDialog'
 
 interface PhotoUploadProps {
   currentPhotoUrl: string | null
@@ -17,6 +18,8 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [compressing, setCompressing] = useState(false)
+  const [showCropDialog, setShowCropDialog] = useState(false)
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,15 +41,36 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
 
     setError('')
 
+    // Create a preview URL for the cropping dialog
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImageToCrop(reader.result as string)
+      setShowCropDialog(true)
+    }
+    reader.onerror = () => {
+      setError('Failed to read image file')
+    }
+    reader.readAsDataURL(file)
+
+    // Reset file input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handleCropComplete = async (croppedFile: File) => {
+    setShowCropDialog(false)
+    setImageToCrop(null)
+
     try {
-      let fileToUpload = file
+      let fileToUpload = croppedFile
 
       // Compress if larger than 2.5MB
-      if (file.size > 2.5 * 1024 * 1024) {
+      if (croppedFile.size > 2.5 * 1024 * 1024) {
         setCompressing(true)
-        console.log(`Original file size: ${formatFileSize(file.size)}`)
+        console.log(`Original file size: ${formatFileSize(croppedFile.size)}`)
         
-        fileToUpload = await compressImage(file, {
+        fileToUpload = await compressImage(croppedFile, {
           maxSizeMB: 2.5,
           targetSizeMB: 2,
           maxWidthOrHeight: 2048,
@@ -110,6 +134,21 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
 
       {error && (
         <p className="text-sm text-destructive">{error}</p>
+      )}
+
+      {imageToCrop && (
+        <ImageCropDialog
+          open={showCropDialog}
+          onOpenChange={(open) => {
+            setShowCropDialog(open)
+            if (!open) {
+              // Clean up when dialog closes
+              setImageToCrop(null)
+            }
+          }}
+          imageSrc={imageToCrop}
+          onCropComplete={handleCropComplete}
+        />
       )}
     </div>
   )

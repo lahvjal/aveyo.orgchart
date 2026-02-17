@@ -104,8 +104,8 @@ export function UserManagement() {
     return <div>Loading users...</div>
   }
 
-  // Filter out the current editing user from potential managers
-  const potentialManagers = profiles?.filter((p) => p.id !== editingUser?.id) || []
+  // Filter to only show managers, excluding the current editing user
+  const potentialManagers = profiles?.filter((p) => p.is_manager && p.id !== editingUser?.id) || []
 
   return (
     <div className="space-y-6">

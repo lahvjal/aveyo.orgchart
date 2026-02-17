@@ -245,7 +245,7 @@ export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <option value="">No Manager</option>
-                {profiles?.map((profile) => (
+                {profiles?.filter((p) => p.is_manager).map((profile) => (
                   <option key={profile.id} value={profile.id}>
                     {profile.full_name} - {profile.job_title}
                   </option>
