@@ -43,7 +43,7 @@ export function ProfileCard({ profile, showContactInfo = true, onEdit }: Profile
             {profile.department && (
               <Badge 
                 className="mt-2"
-                style={{ backgroundColor: profile.department.color }}
+                style={{ backgroundColor: profile.department.color, color: 'white' }}
               >
                 {profile.department.name}
               </Badge>
