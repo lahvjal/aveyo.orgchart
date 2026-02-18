@@ -50,15 +50,19 @@ export function useOrgChart(profiles: Profile[], isAdmin: boolean, currentUserId
 
     const dagreGraph = new dagre.graphlib.Graph()
     dagreGraph.setDefaultEdgeLabel(() => ({}))
+    // Node dimensions must match the rendered EmployeeNode size
+    const NODE_WIDTH = 220
+    const NODE_HEIGHT = 240 // 150px photo + ~90px content
+
     dagreGraph.setGraph({ 
-      rankdir: 'TB', // Top to bottom
-      nodesep: 100,
-      ranksep: 150,
+      rankdir: 'TB',
+      nodesep: 60,  // horizontal gap between sibling cards
+      ranksep: 80,  // vertical gap between ranks
     })
 
     // Add nodes to dagre
     nodes.forEach((node) => {
-      dagreGraph.setNode(node.id, { width: 280, height: 120 })
+      dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT })
     })
 
     // Add edges to dagre
@@ -69,14 +73,14 @@ export function useOrgChart(profiles: Profile[], isAdmin: boolean, currentUserId
     // Calculate layout
     dagre.layout(dagreGraph)
 
-    // Apply calculated positions to nodes
+    // Apply calculated positions to nodes (dagre returns center coords, ReactFlow uses top-left)
     return nodes.map((node) => {
       const nodeWithPosition = dagreGraph.node(node.id)
       return {
         ...node,
         position: {
-          x: nodeWithPosition.x - 140, // Center the node
-          y: nodeWithPosition.y - 60,
+          x: nodeWithPosition.x - NODE_WIDTH / 2,
+          y: nodeWithPosition.y - NODE_HEIGHT / 2,
         },
       }
     })

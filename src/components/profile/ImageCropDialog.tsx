@@ -4,6 +4,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '../ui/button'
 import type { Area } from 'react-easy-crop'
 
+// Must match the photo area dimensions in EmployeeNode (w-[220px] / h-[150px])
+const NODE_PHOTO_ASPECT = 220 / 150
+
 interface ImageCropDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -32,6 +35,7 @@ export function ImageCropDialog({ open, onOpenChange, imageSrc, onCropComplete }
   const createImage = (url: string): Promise<HTMLImageElement> =>
     new Promise((resolve, reject) => {
       const image = new Image()
+      image.crossOrigin = 'anonymous'
       image.addEventListener('load', () => resolve(image))
       image.addEventListener('error', (error) => reject(error))
       image.src = url
@@ -121,7 +125,7 @@ export function ImageCropDialog({ open, onOpenChange, imageSrc, onCropComplete }
         <DialogHeader>
           <DialogTitle>Crop Your Photo</DialogTitle>
           <DialogDescription>
-            Adjust the crop area and zoom to frame your photo the way you want
+            Adjust the crop area and zoom — the preview matches exactly how your photo will appear on the org chart
           </DialogDescription>
         </DialogHeader>
 
@@ -130,11 +134,11 @@ export function ImageCropDialog({ open, onOpenChange, imageSrc, onCropComplete }
             image={imageSrc}
             crop={crop}
             zoom={zoom}
-            aspect={1}
+            aspect={NODE_PHOTO_ASPECT}
             onCropChange={onCropChange}
             onZoomChange={onZoomChange}
             onCropComplete={onCropCompleteCallback}
-            cropShape="round"
+            cropShape="rect"
             showGrid={false}
           />
         </div>
