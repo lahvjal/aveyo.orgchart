@@ -6,6 +6,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
+import { JobDescriptionEditor } from '../ui/JobDescriptionEditor'
 import { CheckCircle2, User, Lock, FileText, AlertCircle } from 'lucide-react'
 import type { Profile } from '../../types'
 
@@ -243,13 +244,12 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="jobDescription">Job Description (Optional)</Label>
-                <Textarea
-                  id="jobDescription"
+                <Label>Job Description (Optional)</Label>
+                <JobDescriptionEditor
                   value={jobDescription}
-                  onChange={(e) => setJobDescription(e.target.value)}
+                  onChange={(html) => setJobDescription(html)}
                   placeholder="Describe your role and responsibilities..."
-                  rows={3}
+                  minRows={3}
                 />
               </div>
 

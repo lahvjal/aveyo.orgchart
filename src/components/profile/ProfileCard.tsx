@@ -1,3 +1,4 @@
+import DOMPurify from 'dompurify'
 import type { Profile } from '../../types'
 import { Card, CardContent, CardHeader } from '../ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
@@ -53,7 +54,10 @@ export function ProfileCard({ profile, showContactInfo = true }: ProfileCardProp
         {profile.job_description && (
           <div>
             <h3 className="font-semibold mb-2">About</h3>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{profile.job_description}</p>
+            <div
+              className="text-sm text-muted-foreground job-description-content"
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(profile.job_description) }}
+            />
           </div>
         )}
 

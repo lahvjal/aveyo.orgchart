@@ -49,3 +49,54 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
 }
+
+/* Job Description rich text editor */
+.job-description-editor .ProseMirror {
+  outline: none;
+  min-height: inherit;
+}
+
+.job-description-editor .ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.job-description-editor .ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.job-description-editor .ProseMirror li {
+  margin: 0.125rem 0;
+}
+
+.job-description-editor .ProseMirror li > p {
+  margin: 0;
+}
+
+.job-description-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+  float: left;
+  height: 0;
+}
+
+/* Job Description rendered HTML (read-only display) */
+.job-description-content ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.job-description-content ol {
+  list-style-type: decimal;
+  padding-left: 1.25rem;
+  margin: 0.25rem 0;
+}
+
+.job-description-content li {
+  margin: 0.125rem 0;
+}

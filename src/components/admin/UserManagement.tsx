@@ -7,6 +7,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
+import { JobDescriptionEditor } from '../ui/JobDescriptionEditor'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
@@ -201,14 +202,12 @@ export function UserManagement() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="job_description">Job Description</Label>
-                <Textarea
-                  id="job_description"
-                  value={formData.job_description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, job_description: e.target.value }))}
+                <Label>Job Description</Label>
+                <JobDescriptionEditor
+                  value={formData.job_description || ''}
+                  onChange={(html) => setFormData(prev => ({ ...prev, job_description: html }))}
                   placeholder="Describe the employee's role and responsibilities..."
-                  rows={4}
-                  className="resize-none"
+                  minRows={4}
                 />
               </div>
 
