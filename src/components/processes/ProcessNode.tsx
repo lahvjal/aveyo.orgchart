@@ -238,7 +238,7 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
             {taggedDepartments.map((dept) => (
               <Badge
                 key={dept.id}
-                className="text-xs pr-1 cursor-default"
+                className="text-xs pr-2.5 cursor-default"
                 style={{ backgroundColor: dept.color, color: 'white' }}
               >
                 {dept.name}
