@@ -36,13 +36,16 @@ const edgeTypes: EdgeTypes = { process: ProcessEdge }
 interface ProcessCanvasProps {
   processId: string
   canEdit: boolean
+  isPublic?: boolean
 }
 
-function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
+function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCanvasProps) {
   const { data: dbNodes = [], isLoading: nodesLoading } = useProcessNodes(processId)
   const { data: dbEdges = [], isLoading: edgesLoading } = useProcessEdges(processId)
-  const { data: allProfiles = [] } = useProfiles()
-  const { data: allDepartments = [] } = useDepartments()
+  // Disabled on public pages — prevents org-wide employee/dept data from being
+  // fetched and exposed to unauthenticated viewers
+  const { data: allProfiles = [] } = useProfiles({ enabled: !isPublic })
+  const { data: allDepartments = [] } = useDepartments({ enabled: !isPublic })
   const isLoading = nodesLoading || edgesLoading
 
   const createNode = useCreateProcessNode()
@@ -311,10 +314,10 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   )
 }
 
-export function ProcessCanvas(props: ProcessCanvasProps) {
+export function ProcessCanvas({ isPublic = false, ...props }: ProcessCanvasProps) {
   return (
     <ReactFlowProvider>
-      <ProcessCanvasInner {...props} />
+      <ProcessCanvasInner isPublic={isPublic} {...props} />
     </ReactFlowProvider>
   )
 }

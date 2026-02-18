@@ -1,10 +1,12 @@
 import { useState } from 'react'
-import { ArrowLeft, Pencil, Eye } from 'lucide-react'
+import { ArrowLeft, Pencil, Eye, Share2 } from 'lucide-react'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuth } from '../hooks/useAuth'
 import { ProcessList } from '../components/processes/ProcessList'
 import { ProcessCanvas } from '../components/processes/ProcessCanvas'
+import { ProcessShareLinkManager } from '../components/processes/ProcessShareLinkManager'
 import { Button } from '../components/ui/button'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog'
 import type { Process } from '../types/processes'
 import { Loader2 } from 'lucide-react'
 
@@ -13,6 +15,7 @@ export default function Processes() {
   const { isAdmin, isManager, isLoading } = usePermissions()
   const [selectedProcess, setSelectedProcess] = useState<Process | null>(null)
   const [editMode, setEditMode] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
 
   if (isLoading) {
     return (
@@ -48,26 +51,40 @@ export default function Processes() {
             <span className="font-semibold text-sm">{selectedProcess.name}</span>
           </div>
 
-          {userCanEdit && (
-            <Button
-              variant={editMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setEditMode((m) => !m)}
-              className="gap-1.5"
-            >
-              {editMode ? (
-                <>
-                  <Eye className="h-4 w-4" />
-                  View Mode
-                </>
-              ) : (
-                <>
-                  <Pencil className="h-4 w-4" />
-                  Edit Mode
-                </>
-              )}
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {userCanEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShareOpen(true)}
+                className="gap-1.5"
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+            )}
+
+            {userCanEdit && (
+              <Button
+                variant={editMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setEditMode((m) => !m)}
+                className="gap-1.5"
+              >
+                {editMode ? (
+                  <>
+                    <Eye className="h-4 w-4" />
+                    View Mode
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-4 w-4" />
+                    Edit Mode
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Canvas area (fills remaining height) */}
@@ -77,6 +94,19 @@ export default function Processes() {
             canEdit={userCanEdit && editMode}
           />
         </div>
+
+        {/* Share link manager dialog */}
+        <Dialog open={shareOpen} onOpenChange={setShareOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Share Process Diagram</DialogTitle>
+            </DialogHeader>
+            <ProcessShareLinkManager
+              processId={selectedProcess.id}
+              processName={selectedProcess.name}
+            />
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }

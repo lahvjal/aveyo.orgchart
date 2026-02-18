@@ -3,9 +3,10 @@ import { supabase } from './supabase'
 import type { Department, OrgChartPosition, ShareLink } from '../types'
 
 // Departments
-export function useDepartments() {
+export function useDepartments({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['departments'],
+    enabled,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('departments')
@@ -207,6 +208,153 @@ export function useDeleteShareLink() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['share-links'] })
+    },
+  })
+}
+
+// Process Share Links
+
+export interface ProcessShareLink {
+  id: string
+  slug: string
+  process_id: string
+  created_by: string
+  expires_at: string | null
+  is_active: boolean
+  created_at: string
+}
+
+/** Authenticated: list all share links for a specific process */
+export function useProcessShareLinks(processId: string | null) {
+  return useQuery({
+    queryKey: ['process-share-links', processId],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('process_share_links')
+        .select('*')
+        .eq('process_id', processId)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      return data as ProcessShareLink[]
+    },
+    enabled: !!processId,
+  })
+}
+
+/**
+ * Anon-safe: validate a slug and return the share link record.
+ * Used by the public page — runs with the anon key, no session required.
+ * Returns null (not throws) if the link is expired, revoked, or not found
+ * so the UI shows a uniform "not available" message regardless of reason.
+ */
+export function usePublicProcessShareLink(slug: string) {
+  return useQuery({
+    queryKey: ['public-process-share-link', slug],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('process_share_links')
+        .select('*')
+        .eq('slug', slug)
+        .eq('is_active', true)
+        .maybeSingle()
+
+      if (error) {
+        console.error('[share-link] lookup failed:', error)
+        throw error
+      }
+
+      if (!data) return null
+
+      const link = data as ProcessShareLink
+
+      if (link.expires_at && new Date(link.expires_at) < new Date()) {
+        return null
+      }
+
+      return link
+    },
+    enabled: !!slug,
+    retry: false,
+  })
+}
+
+/** Authenticated: create a share link for a process */
+export function useCreateProcessShareLink() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      process_id,
+      expires_at,
+    }: {
+      process_id: string
+      expires_at?: string | null
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      // crypto.randomUUID() — 128-bit cryptographically secure random slug
+      const slug = crypto.randomUUID().replace(/-/g, '')
+
+      const { data, error } = await (supabase as any)
+        .from('process_share_links')
+        .insert({
+          slug,
+          process_id,
+          created_by: user.id,
+          expires_at: expires_at || null,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as ProcessShareLink
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['process-share-links', variables.process_id] })
+    },
+  })
+}
+
+/** Authenticated: toggle a share link active/inactive (instant revocation without deletion) */
+export function useToggleProcessShareLink() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, process_id: _process_id, is_active }: { id: string; process_id: string; is_active: boolean }) => {
+      const { data, error } = await (supabase as any)
+        .from('process_share_links')
+        .update({ is_active })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as ProcessShareLink
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['process-share-links', variables.process_id] })
+    },
+  })
+}
+
+/** Authenticated: permanently delete a share link */
+export function useDeleteProcessShareLink() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({ id, process_id }: { id: string; process_id: string }) => {
+      const { error } = await (supabase as any)
+        .from('process_share_links')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      return { id, process_id }
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['process-share-links', variables.process_id] })
     },
   })
 }

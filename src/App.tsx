@@ -14,6 +14,7 @@ import Profile from './pages/Profile'
 import AdminPanel from './pages/AdminPanel'
 import ManagerPanel from './pages/ManagerPanel'
 import PublicShare from './pages/PublicShare'
+import PublicProcessView from './pages/PublicProcessView'
 import Processes from './pages/Processes'
 
 const queryClient = new QueryClient({
@@ -34,6 +35,8 @@ function App() {
           <Route path="/signup" element={<Signup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          {/* /share/process/:slug must come before /share/:slug to avoid swallowing */}
+          <Route path="/share/process/:slug" element={<PublicProcessView />} />
           <Route path="/share/:slug" element={<PublicShare />} />
           <Route path="/onboarding" element={<Onboarding />} />
           

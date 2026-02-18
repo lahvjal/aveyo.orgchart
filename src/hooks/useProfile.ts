@@ -109,9 +109,10 @@ export function useUpdateProfile() {
   })
 }
 
-export function useProfiles() {
+export function useProfiles({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['profiles'],
+    enabled,
     queryFn: async () => {
       console.log('useProfiles: Fetching all profiles...')
       
