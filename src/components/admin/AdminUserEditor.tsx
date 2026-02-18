@@ -6,9 +6,8 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { JobDescriptionEditor } from '../ui/JobDescriptionEditor'
-import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
-import { getInitials } from '../../lib/utils'
 import { Loader2, Shield, Users, Info } from 'lucide-react'
+import { PhotoUpload } from '../profile/PhotoUpload'
 
 interface AdminUserEditorProps {
   profile: Profile
@@ -22,6 +21,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
   const updateProfile = useUpdateProfile()
 
   const [departmentAutoFilled, setDepartmentAutoFilled] = useState(false)
+  const [currentPhotoUrl, setCurrentPhotoUrl] = useState(profile.profile_photo_url)
   const [formData, setFormData] = useState({
     job_title: profile.job_title,
     manager_id: profile.manager_id || '',
@@ -41,6 +41,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
       is_admin: profile.is_admin,
       is_manager: profile.is_manager || false,
     })
+    setCurrentPhotoUrl(profile.profile_photo_url)
     setDepartmentAutoFilled(false)
   }, [profile.id])
 
@@ -83,15 +84,24 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
 
   const potentialManagers = profiles?.filter(p => p.is_manager && p.id !== profile.id) || []
 
+  const handlePhotoUploaded = async (url: string) => {
+    setCurrentPhotoUrl(url)
+    await updateProfile.mutateAsync({
+      id: profile.id,
+      profile_photo_url: url,
+    } as any)
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
-        <Avatar>
-          {profile.profile_photo_url && (
-            <AvatarImage src={profile.profile_photo_url} alt={profile.full_name} />
-          )}
-          <AvatarFallback>{getInitials(profile.full_name)}</AvatarFallback>
-        </Avatar>
+      <div className="flex items-center gap-4 p-3 bg-muted rounded-lg">
+        <PhotoUpload
+          currentPhotoUrl={currentPhotoUrl}
+          userName={profile.full_name}
+          userId={profile.id}
+          onPhotoUploaded={handlePhotoUploaded}
+          size="sm"
+        />
         <div>
           <p className="font-medium">{profile.full_name}</p>
           <p className="text-sm text-muted-foreground">{profile.email}</p>

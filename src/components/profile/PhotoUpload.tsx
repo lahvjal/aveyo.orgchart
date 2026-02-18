@@ -12,9 +12,10 @@ interface PhotoUploadProps {
   userName: string
   userId: string
   onPhotoUploaded: (url: string) => void
+  size?: 'sm' | 'lg'
 }
 
-export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded }: PhotoUploadProps) {
+export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded, size = 'lg' }: PhotoUploadProps) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
   const [compressing, setCompressing] = useState(false)
@@ -92,14 +93,16 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
     }
   }
 
+  const isSmall = size === 'sm'
+
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className={isSmall ? 'flex flex-col items-center gap-1' : 'flex flex-col items-center gap-4'}>
       <div className="relative">
-        <Avatar className="h-32 w-32">
+        <Avatar className={isSmall ? 'h-10 w-10' : 'h-32 w-32'}>
           {currentPhotoUrl && (
             <AvatarImage src={currentPhotoUrl} alt={userName} />
           )}
-          <AvatarFallback className="text-2xl">
+          <AvatarFallback className={isSmall ? '' : 'text-2xl'}>
             {getInitials(userName)}
           </AvatarFallback>
         </Avatar>
@@ -107,11 +110,13 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
         <Button
           type="button"
           size="icon"
-          className="absolute bottom-0 right-0 rounded-full"
+          className={isSmall
+            ? 'absolute -bottom-1 -right-1 rounded-full h-5 w-5'
+            : 'absolute bottom-0 right-0 rounded-full'}
           onClick={() => fileInputRef.current?.click()}
           disabled={uploading || compressing}
         >
-          <Camera className="h-4 w-4" />
+          <Camera className={isSmall ? 'h-3 w-3' : 'h-4 w-4'} />
         </Button>
       </div>
 
@@ -124,11 +129,11 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
         disabled={uploading || compressing}
       />
 
-      {compressing && (
+      {!isSmall && compressing && (
         <p className="text-sm text-muted-foreground">Compressing image...</p>
       )}
 
-      {uploading && (
+      {!isSmall && uploading && (
         <p className="text-sm text-muted-foreground">Uploading...</p>
       )}
 
