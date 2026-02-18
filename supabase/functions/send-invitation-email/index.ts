@@ -44,7 +44,7 @@ serve(async (req) => {
     
     const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, is_manager')
       .eq('id', userId)
       .single()
 
@@ -64,10 +64,10 @@ serve(async (req) => {
 
     console.log('Edge Function: Profile fetched:', profile)
 
-    if (!profile?.is_admin) {
-      console.error('Edge Function: User is not admin')
+    if (!profile?.is_admin && !profile?.is_manager) {
+      console.error('Edge Function: User is not an admin or manager')
       return new Response(
-        JSON.stringify({ error: 'Admin access required' }),
+        JSON.stringify({ error: 'Admin or manager access required' }),
         { 
           status: 403, 
           headers: { 
@@ -78,7 +78,7 @@ serve(async (req) => {
       )
     }
 
-    console.log('Edge Function: Admin verified, sending email')
+    console.log('Edge Function: Access verified, sending email')
 
     console.log('Sending invitation email to:', email)
 

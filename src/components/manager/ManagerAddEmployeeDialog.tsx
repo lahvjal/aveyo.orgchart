@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useInviteEmployee } from '../../hooks/useInviteEmployee'
-import { useProfile } from '../../hooks/useProfile'
+import { useProfile, useProfileBranch } from '../../hooks/useProfile'
 import { useDepartments } from '../../lib/queries'
 import {
   Dialog,
@@ -24,6 +24,7 @@ export function ManagerAddEmployeeDialog({ open, onOpenChange }: ManagerAddEmplo
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
   const [jobTitle, setJobTitle] = useState('')
+  const [managerId, setManagerId] = useState('')
   const [departmentId, setDepartmentId] = useState('')
   const [departmentAutoFilled, setDepartmentAutoFilled] = useState(false)
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0])
@@ -32,13 +33,23 @@ export function ManagerAddEmployeeDialog({ open, onOpenChange }: ManagerAddEmplo
 
   const inviteEmployee = useInviteEmployee()
   const { data: currentManager } = useProfile()
+  const { data: branchProfiles } = useProfileBranch(currentManager?.id)
   const { data: departments } = useDepartments()
 
-  // Auto-fill department from manager when dialog opens
+  // Managers the current user can assign: themselves + any managers in their reporting chain
+  const assignableManagers = [
+    ...(currentManager ? [currentManager] : []),
+    ...((branchProfiles ?? []).filter((p) => p.is_manager && p.id !== currentManager?.id)),
+  ]
+
+  // Auto-fill department and manager when dialog opens
   useEffect(() => {
-    if (open && currentManager?.department_id) {
-      setDepartmentId(currentManager.department_id)
-      setDepartmentAutoFilled(true)
+    if (open && currentManager) {
+      setManagerId(currentManager.id)
+      if (currentManager.department_id) {
+        setDepartmentId(currentManager.department_id)
+        setDepartmentAutoFilled(true)
+      }
     }
   }, [open, currentManager])
 
@@ -108,10 +119,10 @@ export function ManagerAddEmployeeDialog({ open, onOpenChange }: ManagerAddEmplo
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       jobTitle: jobTitle.trim(),
-      managerId: currentManager.id, // Always use current manager
+      managerId: managerId || currentManager.id,
       departmentId: departmentId || undefined,
       startDate,
-      managerMode: true, // Enable manager mode
+      managerMode: true,
     })
 
     if (result.success) {
@@ -123,6 +134,7 @@ export function ManagerAddEmployeeDialog({ open, onOpenChange }: ManagerAddEmplo
         setFirstName('')
         setLastName('')
         setJobTitle('')
+        setManagerId(currentManager?.id || '')
         setDepartmentId('')
         setDepartmentAutoFilled(false)
         setStartDate(new Date().toISOString().split('T')[0])
@@ -140,6 +152,7 @@ export function ManagerAddEmployeeDialog({ open, onOpenChange }: ManagerAddEmplo
     setFirstName('')
     setLastName('')
     setJobTitle('')
+    setManagerId(currentManager?.id || '')
     setDepartmentId('')
     setDepartmentAutoFilled(false)
     setStartDate(new Date().toISOString().split('T')[0])
@@ -241,15 +254,33 @@ export function ManagerAddEmployeeDialog({ open, onOpenChange }: ManagerAddEmplo
 
             <div className="space-y-2">
               <Label htmlFor="manager">Manager</Label>
-              <Input
-                id="manager"
-                type="text"
-                value={currentManager.full_name}
-                disabled
-                className="bg-muted cursor-not-allowed"
-              />
+              {assignableManagers.length > 1 ? (
+                <select
+                  id="manager"
+                  value={managerId}
+                  onChange={(e) => setManagerId(e.target.value)}
+                  disabled={inviteEmployee.isPending}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {assignableManagers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.full_name}{m.id === currentManager?.id ? ' (you)' : ''}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <Input
+                  id="manager"
+                  type="text"
+                  value={currentManager.full_name}
+                  disabled
+                  className="bg-muted cursor-not-allowed"
+                />
+              )}
               <p className="text-xs text-muted-foreground">
-                This team member will report to you. This cannot be changed.
+                {assignableManagers.length > 1
+                  ? 'Select the manager this person will report to. Only managers in your team are shown.'
+                  : 'This team member will report directly to you.'}
               </p>
             </div>
 
