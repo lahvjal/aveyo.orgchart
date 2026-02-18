@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth'
 import { OrgChartCanvas } from '../components/org-chart/OrgChartCanvas'
 import { EmployeeSearch } from '../components/search/EmployeeSearch'
 import { ProfileCard } from '../components/profile/ProfileCard'
+import { AdminUserEditorDialog } from '../components/admin/AdminUserEditorDialog'
 import { OnboardingWizard } from '../components/onboarding/OnboardingWizard'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
@@ -15,6 +16,7 @@ export default function Dashboard() {
   const { data: currentProfile, isLoading: profileLoading } = useProfile()
   const { isAdmin, isLoading: permissionsLoading } = usePermissions()
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
+  const [editingProfile, setEditingProfile] = useState<string | null>(null)
   // Default to the current user's department if provided
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null)
   const hasInitializedDepartment = useRef(false)
@@ -58,6 +60,7 @@ export default function Dashboard() {
   console.log('Dashboard: Final - profiles:', profiles, 'isLoading:', isLoading)
 
   const selectedProfile = allProfiles?.find((p) => p.id === selectedProfileId)
+  const profileBeingEdited = allProfiles?.find((p) => p.id === editingProfile) ?? null
 
   if (isLoading) {
     return (
@@ -137,10 +140,19 @@ export default function Dashboard() {
               >
                 <X className="h-4 w-4" />
               </Button>
-              <ProfileCard profile={selectedProfile} />
+              <ProfileCard
+                profile={selectedProfile}
+                onEdit={() => setEditingProfile(selectedProfile.id)}
+              />
             </div>
           </div>
         )}
+
+        <AdminUserEditorDialog
+          profile={profileBeingEdited}
+          open={!!editingProfile}
+          onOpenChange={(open) => !open && setEditingProfile(null)}
+        />
       </div>
     </div>
   )

@@ -3,17 +3,19 @@ import type { Profile } from '../../types'
 import { Card, CardContent, CardHeader } from '../ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
+import { Button } from '../ui/button'
 import { getInitials, formatDateOnly } from '../../lib/utils'
-import { Mail, Phone, MapPin, Calendar, Cake, Linkedin, Instagram, Facebook } from 'lucide-react'
+import { Mail, Phone, MapPin, Calendar, Cake, Linkedin, Instagram, Facebook, Pencil } from 'lucide-react'
 import { usePermissions } from '../../hooks/usePermissions'
 import { useProfile } from '../../hooks/useProfile'
 
 interface ProfileCardProps {
   profile: Profile
   showContactInfo?: boolean
+  onEdit?: () => void
 }
 
-export function ProfileCard({ profile, showContactInfo = true }: ProfileCardProps) {
+export function ProfileCard({ profile, showContactInfo = true, onEdit }: ProfileCardProps) {
   const { isAdmin, isManager, getTeamMembers } = usePermissions()
   const { data: currentProfile } = useProfile()
   const teamMembers = getTeamMembers()
@@ -47,6 +49,18 @@ export function ProfileCard({ profile, showContactInfo = true }: ProfileCardProp
               </Badge>
             )}
           </div>
+
+          {isAdmin && onEdit && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onEdit}
+              className="shrink-0"
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+              Edit
+            </Button>
+          )}
         </div>
       </CardHeader>
 
