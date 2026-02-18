@@ -143,7 +143,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
               </div>
             </div>
 
-            <Button onClick={() => setCurrentStep('password')} className="w-full">
+            <Button type="button" onClick={() => setCurrentStep('password')} className="w-full">
               Get Started
             </Button>
           </div>
@@ -199,6 +199,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
 
             <div className="flex gap-3">
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => setCurrentStep('welcome')}
                 disabled={loading}
@@ -206,6 +207,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
                 Back
               </Button>
               <Button
+                type="button"
                 onClick={handleSetPassword}
                 disabled={loading || !password || !confirmPassword}
                 className="flex-1"
@@ -316,6 +318,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
 
             <div className="flex gap-3">
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => setCurrentStep('password')}
                 disabled={loading}
@@ -323,6 +326,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
                 Back
               </Button>
               <Button
+                type="button"
                 onClick={handleUpdateProfile}
                 disabled={loading}
                 className="flex-1"
@@ -364,7 +368,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
               </ul>
             </div>
 
-            <Button onClick={handleComplete} className="w-full">
+            <Button type="button" onClick={handleComplete} className="w-full">
               Go to Dashboard
             </Button>
           </div>
