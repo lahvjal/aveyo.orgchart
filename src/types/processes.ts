@@ -28,6 +28,7 @@ export interface ProcessNode {
   x_position: number
   y_position: number
   tagged_profile_ids: string[]
+  tagged_department_ids: string[]
   created_at: string
 }
 

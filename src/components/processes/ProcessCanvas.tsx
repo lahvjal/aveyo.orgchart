@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -15,6 +15,7 @@ import { ProcessNode } from './ProcessNode'
 import type { ProcessNodeData } from './ProcessNode'
 import { ProcessEdge } from './ProcessEdge'
 import { ProcessNodePalette } from './ProcessNodePalette'
+import { ProcessCanvasContext } from './ProcessCanvasContext'
 import type { ProcessNodeType } from '../../types/processes'
 import {
   useProcessNodes,
@@ -26,14 +27,11 @@ import {
   useDeleteProcessEdge,
 } from '../../hooks/useProcesses'
 import { useProfiles } from '../../hooks/useProfile'
+import { useDepartments } from '../../lib/queries'
 
-const nodeTypes: NodeTypes = {
-  process: ProcessNode,
-}
-
-const edgeTypes: EdgeTypes = {
-  process: ProcessEdge,
-}
+// Defined outside component so ReactFlow never sees new object references
+const nodeTypes: NodeTypes = { process: ProcessNode }
+const edgeTypes: EdgeTypes = { process: ProcessEdge }
 
 interface ProcessCanvasProps {
   processId: string
@@ -44,6 +42,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   const { data: dbNodes = [], isLoading: nodesLoading } = useProcessNodes(processId)
   const { data: dbEdges = [], isLoading: edgesLoading } = useProcessEdges(processId)
   const { data: allProfiles = [] } = useProfiles()
+  const { data: allDepartments = [] } = useDepartments()
   const isLoading = nodesLoading || edgesLoading
 
   const createNode = useCreateProcessNode()
@@ -52,8 +51,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   const createEdge = useCreateProcessEdge()
   const deleteEdge = useDeleteProcessEdge()
 
-  // Keep mutation objects in refs so their unstable references never appear in
-  // useCallback/useEffect dependency arrays, preventing infinite re-render loops.
+  // Mutation objects in refs — their unstable identity never enters useCallback deps
   const updateNodeRef = useRef(updateNode)
   const deleteNodeRef = useRef(deleteNode)
   const createEdgeRef = useRef(createEdge)
@@ -68,18 +66,15 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<ProcessNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const { fitView, screenToFlowPosition } = useReactFlow()
-  // Track whether we've done the one-time init from the database
   const hasInitialized = useRef(false)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
 
-  // Stable callbacks — mutations accessed via refs, not as direct deps
+  // Stable callbacks via mutation refs — safe in useCallback dep arrays
   const handleLabelChange = useCallback(
     (id: string, label: string) => {
       updateNodeRef.current.mutate({ id, process_id: processId, label })
-      setNodes((nds) =>
-        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, label } } : n))
-      )
+      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, label } } : n)))
     },
     [processId, setNodes]
   )
@@ -87,9 +82,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   const handleDescriptionChange = useCallback(
     (id: string, description: string) => {
       updateNodeRef.current.mutate({ id, process_id: processId, description })
-      setNodes((nds) =>
-        nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, description } } : n))
-      )
+      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, description } } : n)))
     },
     [processId, setNodes]
   )
@@ -107,17 +100,24 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
     (nodeId: string, profileIds: string[]) => {
       updateNodeRef.current.mutate({ id: nodeId, process_id: processId, tagged_profile_ids: profileIds })
       setNodes((nds) =>
-        nds.map((n) =>
-          n.id === nodeId ? { ...n, data: { ...n.data, taggedProfileIds: profileIds } } : n
-        )
+        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, taggedProfileIds: profileIds } } : n))
       )
     },
     [processId, setNodes]
   )
 
-  // Initialize canvas ONCE from the database after the first successful load.
-  // Using a ref guard prevents re-running when ReactFlow's internal state
-  // triggers re-renders, which would otherwise cause an infinite setNodes loop.
+  const handleUpdateTaggedDepartments = useCallback(
+    (nodeId: string, departmentIds: string[]) => {
+      updateNodeRef.current.mutate({ id: nodeId, process_id: processId, tagged_department_ids: departmentIds })
+      setNodes((nds) =>
+        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, taggedDepartmentIds: departmentIds } } : n))
+      )
+    },
+    [processId, setNodes]
+  )
+
+  // One-time initialization from the database — ref guard prevents re-runs
+  // on subsequent ReactFlow-triggered re-renders.
   useEffect(() => {
     if (isLoading || hasInitialized.current) return
     hasInitialized.current = true
@@ -130,13 +130,8 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
         nodeType: n.node_type,
         label: n.label,
         description: n.description ?? '',
-        isEditing: canEdit,
         taggedProfileIds: n.tagged_profile_ids ?? [],
-        allProfiles,
-        onLabelChange: handleLabelChange,
-        onDescriptionChange: handleDescriptionChange,
-        onDelete: handleDeleteNode,
-        onUpdateTaggedProfiles: handleUpdateTaggedProfiles,
+        taggedDepartmentIds: n.tagged_department_ids ?? [],
       },
     }))
 
@@ -158,39 +153,23 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading])
 
-  // When edit mode or allProfiles changes, refresh the relevant data on all nodes and edges.
+  // Keep edge canEdit flag in sync when edit mode toggles.
+  // Nodes no longer need updating here — they read canEdit from context.
   useEffect(() => {
-    setNodes((nds) =>
-      nds.map((n) => ({ ...n, data: { ...n.data, isEditing: canEdit, allProfiles } }))
-    )
-    setEdges((eds) =>
-      eds.map((e) => ({ ...e, data: { ...e.data, canEdit } }))
-    )
-  }, [canEdit, allProfiles, setNodes, setEdges])
+    setEdges((eds) => eds.map((e) => ({ ...e, data: { ...e.data, canEdit } })))
+  }, [canEdit, setEdges])
 
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!canEdit || !connection.source || !connection.target) return
-
       createEdgeRef.current.mutate(
-        {
-          process_id: processId,
-          source_node_id: connection.source,
-          target_node_id: connection.target,
-        },
+        { process_id: processId, source_node_id: connection.source, target_node_id: connection.target },
         {
           onSuccess: (savedEdge) => {
             setEdges((eds) =>
               addEdge(
-                {
-                  ...connection,
-                  id: savedEdge.id,
-                  type: 'process',
-                  data: { canEdit },
-                },
-                eds.filter(
-                  (e) => !(e.source === connection.source && e.target === connection.target)
-                )
+                { ...connection, id: savedEdge.id, type: 'process', data: { canEdit } },
+                eds.filter((e) => !(e.source === connection.source && e.target === connection.target))
               )
             )
           },
@@ -202,9 +181,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
 
   const onEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
-      deletedEdges.forEach((e) => {
-        deleteEdgeRef.current.mutate({ id: e.id, process_id: processId })
-      })
+      deletedEdges.forEach((e) => deleteEdgeRef.current.mutate({ id: e.id, process_id: processId }))
     },
     [processId]
   )
@@ -223,7 +200,6 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
     [canEdit, processId]
   )
 
-  // Drag-from-palette: drop handler
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
@@ -237,10 +213,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
       const nodeType = event.dataTransfer.getData('application/process-node-type') as ProcessNodeType
       if (!nodeType) return
 
-      const position = screenToFlowPosition({
-        x: event.clientX,
-        y: event.clientY,
-      })
+      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
 
       createNodeRef.current.mutate(
         {
@@ -260,13 +233,8 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
                 nodeType: savedNode.node_type,
                 label: savedNode.label,
                 description: savedNode.description ?? '',
-                isEditing: canEdit,
                 taggedProfileIds: [],
-                allProfiles,
-                onLabelChange: handleLabelChange,
-                onDescriptionChange: handleDescriptionChange,
-                onDelete: handleDeleteNode,
-                onUpdateTaggedProfiles: handleUpdateTaggedProfiles,
+                taggedDepartmentIds: [],
               },
             }
             setNodes((nds) => [...nds, newNode])
@@ -274,7 +242,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
         }
       )
     },
-    [canEdit, processId, rfInstance, screenToFlowPosition, allProfiles, handleLabelChange, handleDescriptionChange, handleDeleteNode, handleUpdateTaggedProfiles, setNodes]
+    [canEdit, processId, rfInstance, screenToFlowPosition, setNodes]
   )
 
   const handleDragStart = useCallback((event: React.DragEvent, nodeType: ProcessNodeType) => {
@@ -282,41 +250,64 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
     event.dataTransfer.effectAllowed = 'move'
   }, [])
 
-  return (
-    <div className="flex w-full h-full">
-      {canEdit && <ProcessNodePalette onDragStart={handleDragStart} />}
+  // Memoized context value — only recreates when actual values change
+  const contextValue = useMemo(
+    () => ({
+      isEditing: canEdit,
+      allProfiles,
+      allDepartments,
+      onLabelChange: handleLabelChange,
+      onDescriptionChange: handleDescriptionChange,
+      onDelete: handleDeleteNode,
+      onUpdateTaggedProfiles: handleUpdateTaggedProfiles,
+      onUpdateTaggedDepartments: handleUpdateTaggedDepartments,
+    }),
+    [
+      canEdit,
+      allProfiles,
+      allDepartments,
+      handleLabelChange,
+      handleDescriptionChange,
+      handleDeleteNode,
+      handleUpdateTaggedProfiles,
+      handleUpdateTaggedDepartments,
+    ]
+  )
 
-      <div ref={reactFlowWrapper} className="flex-1 h-full">
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
-          onEdgesDelete={onEdgesDelete}
-          onNodeDragStop={handleNodeDragStop}
-          onDragOver={onDragOver}
-          onDrop={onDrop}
-          onInit={setRfInstance}
-          nodeTypes={nodeTypes}
-          edgeTypes={edgeTypes}
-          nodesDraggable={canEdit}
-          nodesConnectable={canEdit}
-          elementsSelectable={true}
-          deleteKeyCode={canEdit ? 'Backspace' : null}
-          minZoom={0.1}
-          maxZoom={2}
-          defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
-        >
-          <Background gap={20} size={1} color="#e5e7eb" />
-          <Controls />
-          <MiniMap
-            nodeColor={() => '#94a3b8'}
-            maskColor="rgba(0,0,0,0.06)"
-          />
-        </ReactFlow>
+  return (
+    <ProcessCanvasContext.Provider value={contextValue}>
+      <div className="flex w-full h-full">
+        {canEdit && <ProcessNodePalette onDragStart={handleDragStart} />}
+
+        <div ref={reactFlowWrapper} className="flex-1 h-full">
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onEdgesDelete={onEdgesDelete}
+            onNodeDragStop={handleNodeDragStop}
+            onDragOver={onDragOver}
+            onDrop={onDrop}
+            onInit={setRfInstance}
+            nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            nodesDraggable={canEdit}
+            nodesConnectable={canEdit}
+            elementsSelectable={true}
+            deleteKeyCode={canEdit ? 'Backspace' : null}
+            minZoom={0.1}
+            maxZoom={2}
+            defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
+          >
+            <Background gap={20} size={1} color="#e5e7eb" />
+            <Controls />
+            <MiniMap nodeColor={() => '#94a3b8'} maskColor="rgba(0,0,0,0.06)" />
+          </ReactFlow>
+        </div>
       </div>
-    </div>
+    </ProcessCanvasContext.Provider>
   )
 }
 

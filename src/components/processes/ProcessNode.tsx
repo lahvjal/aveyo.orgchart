@@ -15,21 +15,18 @@ import {
 } from 'lucide-react'
 import type { ProcessNodeType } from '../../types/processes'
 import { getNodeTypeConfig } from '../../types/processes'
-import type { Profile } from '../../types'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
+import { Badge } from '../ui/badge'
 import { getInitials } from '../../lib/utils'
+import { useProcessCanvasContext } from './ProcessCanvasContext'
 
+// Only node-specific fields live in data — shared state comes from context.
 export interface ProcessNodeData {
   nodeType: ProcessNodeType
   label: string
   description?: string
-  isEditing: boolean
   taggedProfileIds: string[]
-  allProfiles: Profile[]
-  onLabelChange: (id: string, label: string) => void
-  onDescriptionChange: (id: string, description: string) => void
-  onDelete: (id: string) => void
-  onUpdateTaggedProfiles: (nodeId: string, profileIds: string[]) => void
+  taggedDepartmentIds: string[]
 }
 
 const NODE_ICONS: Record<ProcessNodeType, React.ComponentType<{ className?: string; style?: React.CSSProperties }>> = {
@@ -43,12 +40,20 @@ const NODE_ICONS: Record<ProcessNodeType, React.ComponentType<{ className?: stri
 }
 
 export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
+  const { nodeType, label, description, taggedProfileIds, taggedDepartmentIds } = data
+
+  // Shared canvas state/callbacks from context — never stale, never cause setNodes loops
   const {
-    nodeType, label, description, isEditing,
-    taggedProfileIds, allProfiles,
-    onLabelChange, onDescriptionChange, onDelete,
+    isEditing,
+    allProfiles,
+    allDepartments,
+    onLabelChange,
+    onDescriptionChange,
+    onDelete,
     onUpdateTaggedProfiles,
-  } = data
+    onUpdateTaggedDepartments,
+  } = useProcessCanvasContext()
+
   const config = getNodeTypeConfig(nodeType)
   const Icon = NODE_ICONS[nodeType]
 
@@ -58,26 +63,40 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
   const [localDesc, setLocalDesc] = useState(description ?? '')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
+  const [deptPickerOpen, setDeptPickerOpen] = useState(false)
   const labelRef = useRef<HTMLInputElement>(null)
   const descRef = useRef<HTMLInputElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
+  const deptPickerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { setLocalLabel(label) }, [label])
   useEffect(() => { setLocalDesc(description ?? '') }, [description])
 
-  // Close picker on outside click
+  // Close employee picker on outside click
   useEffect(() => {
     if (!pickerOpen) return
-    const handleClick = (e: MouseEvent) => {
+    const handler = (e: MouseEvent) => {
       if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
         setPickerOpen(false)
         setSearch('')
       }
     }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
+    document.addEventListener('mousedown', handler, true)
+    return () => document.removeEventListener('mousedown', handler, true)
   }, [pickerOpen])
+
+  // Close department picker on outside click
+  useEffect(() => {
+    if (!deptPickerOpen) return
+    const handler = (e: MouseEvent) => {
+      if (deptPickerRef.current && !deptPickerRef.current.contains(e.target as Node)) {
+        setDeptPickerOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler, true)
+    return () => document.removeEventListener('mousedown', handler, true)
+  }, [deptPickerOpen])
 
   const commitLabel = useCallback(() => {
     setEditingLabel(false)
@@ -100,8 +119,10 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
     if (e.key === 'Enter' || e.key === 'Escape') commitDesc()
   }
 
-  // Derive tagged profile objects from the ID list
+  // Derive objects from ID arrays using context data
   const taggedProfiles = allProfiles.filter((p) => taggedProfileIds.includes(p.id))
+  const taggedDepartments = allDepartments.filter((d) => taggedDepartmentIds.includes(d.id))
+  const untaggedDepartments = allDepartments.filter((d) => !taggedDepartmentIds.includes(d.id))
 
   const filteredProfiles = allProfiles.filter((p) => {
     if (taggedProfileIds.includes(p.id)) return false
@@ -120,12 +141,17 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
     setSearch('')
     setPickerOpen(false)
   }
-
   const handleUntag = (profileId: string) => {
     onUpdateTaggedProfiles(id, taggedProfileIds.filter((pid) => pid !== profileId))
   }
+  const handleTagDept = (deptId: string) => {
+    onUpdateTaggedDepartments(id, [...taggedDepartmentIds, deptId])
+    setDeptPickerOpen(false)
+  }
+  const handleUntagDept = (deptId: string) => {
+    onUpdateTaggedDepartments(id, taggedDepartmentIds.filter((did) => did !== deptId))
+  }
 
-  // Prevent ReactFlow from dragging when interacting with inputs/picker
   const stopPropagation = (e: React.MouseEvent | React.PointerEvent) => e.stopPropagation()
 
   return (
@@ -133,15 +159,15 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
       className="bg-white rounded-lg shadow-lg border-2 border-gray-200 hover:border-gray-400 transition-colors min-w-[200px] max-w-[240px] group"
       style={{ borderTopColor: config.color, borderTopWidth: 4 }}
     >
-      <Handle type="target" position={Position.Top} id="top-target" className="!bg-primary" />
-      <Handle type="source" position={Position.Top} id="top-source" className="!bg-primary" />
-      <Handle type="target" position={Position.Left} id="left-target" className="!bg-primary" />
-      <Handle type="source" position={Position.Left} id="left-source" className="!bg-primary" />
-      <Handle type="target" position={Position.Right} id="right-target" className="!bg-primary" />
-      <Handle type="source" position={Position.Right} id="right-source" className="!bg-primary" />
+      <Handle type="target" position={Position.Top}    id="top-target"    className="!bg-primary" />
+      <Handle type="source" position={Position.Top}    id="top-source"    className="!bg-primary" />
+      <Handle type="target" position={Position.Left}   id="left-target"   className="!bg-primary" />
+      <Handle type="source" position={Position.Left}   id="left-source"   className="!bg-primary" />
+      <Handle type="target" position={Position.Right}  id="right-target"  className="!bg-primary" />
+      <Handle type="source" position={Position.Right}  id="right-source"  className="!bg-primary" />
 
       <div className="p-3">
-        {/* Header: icon + type label + delete */}
+        {/* Header */}
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-1.5">
             <Icon className="h-4 w-4 flex-shrink-0" style={{ color: config.color }} />
@@ -206,6 +232,65 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
           </p>
         )}
 
+        {/* Department badges */}
+        {(taggedDepartments.length > 0 || isEditing) && (
+          <div className="flex flex-wrap gap-1 mt-2">
+            {taggedDepartments.map((dept) => (
+              <Badge
+                key={dept.id}
+                className="text-xs pr-1 cursor-default"
+                style={{ backgroundColor: dept.color, color: 'white' }}
+              >
+                {dept.name}
+                {isEditing && (
+                  <button
+                    onClick={() => handleUntagDept(dept.id)}
+                    onMouseDown={stopPropagation}
+                    className="ml-1 hover:opacity-70 transition-opacity"
+                    title={`Remove ${dept.name}`}
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                )}
+              </Badge>
+            ))}
+
+            {isEditing && untaggedDepartments.length > 0 && (
+              <div className="relative" ref={deptPickerRef}>
+                <button
+                  onClick={() => setDeptPickerOpen((o) => !o)}
+                  onMouseDown={stopPropagation}
+                  className="inline-flex items-center gap-0.5 text-[10px] text-gray-400 hover:text-primary border border-dashed border-gray-300 hover:border-primary rounded-full px-2 py-0.5 transition-colors"
+                  title="Tag a department"
+                >
+                  <X className="h-2.5 w-2.5 rotate-45" />
+                  dept
+                </button>
+
+                {deptPickerOpen && (
+                  <div
+                    className="absolute bottom-7 left-0 z-50 bg-white border border-gray-200 rounded-lg shadow-xl w-44 overflow-hidden"
+                    onMouseDown={stopPropagation}
+                  >
+                    <div className="overflow-y-auto py-1">
+                      {untaggedDepartments.map((dept) => (
+                        <button
+                          key={dept.id}
+                          onClick={() => handleTagDept(dept.id)}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors text-left"
+                        >
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: dept.color }} />
+                          <span className="text-xs text-gray-700 truncate">{dept.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Tagged employees */}
         {(taggedProfiles.length > 0 || isEditing) && (
           <div className="mt-3 pt-2.5 border-t border-gray-100">
@@ -213,18 +298,12 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
               {taggedProfiles.map((profile) => {
                 const displayName = profile.preferred_name || profile.full_name
                 return (
-                  <div
-                    key={profile.id}
-                    className="relative group/tag"
-                    title={`${displayName} — ${profile.job_title}`}
-                  >
+                  <div key={profile.id} className="relative group/tag" title={`${displayName} — ${profile.job_title}`}>
                     <Avatar className="h-6 w-6 ring-2 ring-white">
                       {profile.profile_photo_url && (
                         <AvatarImage src={profile.profile_photo_url} alt={displayName} />
                       )}
-                      <AvatarFallback className="text-[9px]">
-                        {getInitials(profile.full_name)}
-                      </AvatarFallback>
+                      <AvatarFallback className="text-[9px]">{getInitials(profile.full_name)}</AvatarFallback>
                     </Avatar>
                     {isEditing && (
                       <button
@@ -240,7 +319,6 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
                 )
               })}
 
-              {/* Add employee button + picker */}
               {isEditing && (
                 <div className="relative" ref={pickerRef}>
                   <button
@@ -266,7 +344,7 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
                           className="w-full text-xs bg-gray-50 border border-gray-200 rounded px-2 py-1.5 outline-none focus:border-primary"
                         />
                       </div>
-                      <div className="max-h-44 overflow-y-auto">
+                      <div className="max-h-44 overflow-y-auto nowheel">
                         {filteredProfiles.length === 0 ? (
                           <p className="text-xs text-gray-400 text-center py-4 px-2">
                             {search ? 'No matches found' : 'All employees tagged'}
@@ -282,9 +360,7 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
                                 {profile.profile_photo_url && (
                                   <AvatarImage src={profile.profile_photo_url} alt={profile.full_name} />
                                 )}
-                                <AvatarFallback className="text-[9px]">
-                                  {getInitials(profile.full_name)}
-                                </AvatarFallback>
+                                <AvatarFallback className="text-[9px]">{getInitials(profile.full_name)}</AvatarFallback>
                               </Avatar>
                               <div className="min-w-0">
                                 <p className="text-xs font-medium text-gray-800 truncate">

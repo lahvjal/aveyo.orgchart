@@ -158,6 +158,7 @@ export function useUpdateProcessNode() {
       x_position?: number
       y_position?: number
       tagged_profile_ids?: string[]
+      tagged_department_ids?: string[]
     }) => {
       const { id, process_id, ...rest } = updates
       const { data, error } = await (supabase as any)
