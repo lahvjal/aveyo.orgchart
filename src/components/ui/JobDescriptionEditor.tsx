@@ -52,7 +52,7 @@ export function JobDescriptionEditor({
     if (!editor) return
     const currentHTML = editor.isEmpty ? '' : editor.getHTML()
     if (value !== currentHTML) {
-      editor.commands.setContent(value || '', false)
+      editor.commands.setContent(value || '', { emitUpdate: false })
     }
   }, [value, editor])
 
