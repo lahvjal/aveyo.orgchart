@@ -9,10 +9,11 @@ import ReactFlow, {
   useReactFlow,
   ReactFlowProvider,
 } from 'reactflow'
-import type { NodeTypes, Connection, Edge, Node, ReactFlowInstance } from 'reactflow'
+import type { NodeTypes, EdgeTypes, Connection, Edge, Node, ReactFlowInstance } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { ProcessNode } from './ProcessNode'
 import type { ProcessNodeData } from './ProcessNode'
+import { ProcessEdge } from './ProcessEdge'
 import { ProcessNodePalette } from './ProcessNodePalette'
 import type { ProcessNodeType } from '../../types/processes'
 import {
@@ -24,9 +25,14 @@ import {
   useCreateProcessEdge,
   useDeleteProcessEdge,
 } from '../../hooks/useProcesses'
+import { useProfiles } from '../../hooks/useProfile'
 
 const nodeTypes: NodeTypes = {
   process: ProcessNode,
+}
+
+const edgeTypes: EdgeTypes = {
+  process: ProcessEdge,
 }
 
 interface ProcessCanvasProps {
@@ -37,6 +43,7 @@ interface ProcessCanvasProps {
 function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   const { data: dbNodes = [], isLoading: nodesLoading } = useProcessNodes(processId)
   const { data: dbEdges = [], isLoading: edgesLoading } = useProcessEdges(processId)
+  const { data: allProfiles = [] } = useProfiles()
   const isLoading = nodesLoading || edgesLoading
 
   const createNode = useCreateProcessNode()
@@ -96,6 +103,18 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
     [processId, setNodes, setEdges]
   )
 
+  const handleUpdateTaggedProfiles = useCallback(
+    (nodeId: string, profileIds: string[]) => {
+      updateNodeRef.current.mutate({ id: nodeId, process_id: processId, tagged_profile_ids: profileIds })
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === nodeId ? { ...n, data: { ...n.data, taggedProfileIds: profileIds } } : n
+        )
+      )
+    },
+    [processId, setNodes]
+  )
+
   // Initialize canvas ONCE from the database after the first successful load.
   // Using a ref guard prevents re-running when ReactFlow's internal state
   // triggers re-renders, which would otherwise cause an infinite setNodes loop.
@@ -112,9 +131,12 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
         label: n.label,
         description: n.description ?? '',
         isEditing: canEdit,
+        taggedProfileIds: n.tagged_profile_ids ?? [],
+        allProfiles,
         onLabelChange: handleLabelChange,
         onDescriptionChange: handleDescriptionChange,
         onDelete: handleDeleteNode,
+        onUpdateTaggedProfiles: handleUpdateTaggedProfiles,
       },
     }))
 
@@ -123,8 +145,8 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
       source: e.source_node_id,
       target: e.target_node_id,
       label: e.label ?? undefined,
-      type: 'smoothstep',
-      style: { stroke: '#94a3b8', strokeWidth: 2 },
+      type: 'process',
+      data: { canEdit },
     }))
 
     setNodes(rfNodes)
@@ -136,13 +158,15 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading])
 
-  // When the user toggles edit mode, update isEditing on all nodes without
-  // touching positions or labels (so we don't re-trigger the init guard).
+  // When edit mode or allProfiles changes, refresh the relevant data on all nodes and edges.
   useEffect(() => {
     setNodes((nds) =>
-      nds.map((n) => ({ ...n, data: { ...n.data, isEditing: canEdit } }))
+      nds.map((n) => ({ ...n, data: { ...n.data, isEditing: canEdit, allProfiles } }))
     )
-  }, [canEdit, setNodes])
+    setEdges((eds) =>
+      eds.map((e) => ({ ...e, data: { ...e.data, canEdit } }))
+    )
+  }, [canEdit, allProfiles, setNodes, setEdges])
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -161,8 +185,8 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
                 {
                   ...connection,
                   id: savedEdge.id,
-                  type: 'smoothstep',
-                  style: { stroke: '#94a3b8', strokeWidth: 2 },
+                  type: 'process',
+                  data: { canEdit },
                 },
                 eds.filter(
                   (e) => !(e.source === connection.source && e.target === connection.target)
@@ -237,9 +261,12 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
                 label: savedNode.label,
                 description: savedNode.description ?? '',
                 isEditing: canEdit,
+                taggedProfileIds: [],
+                allProfiles,
                 onLabelChange: handleLabelChange,
                 onDescriptionChange: handleDescriptionChange,
                 onDelete: handleDeleteNode,
+                onUpdateTaggedProfiles: handleUpdateTaggedProfiles,
               },
             }
             setNodes((nds) => [...nds, newNode])
@@ -247,7 +274,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
         }
       )
     },
-    [canEdit, processId, rfInstance, screenToFlowPosition, handleLabelChange, handleDescriptionChange, handleDeleteNode, setNodes]
+    [canEdit, processId, rfInstance, screenToFlowPosition, allProfiles, handleLabelChange, handleDescriptionChange, handleDeleteNode, handleUpdateTaggedProfiles, setNodes]
   )
 
   const handleDragStart = useCallback((event: React.DragEvent, nodeType: ProcessNodeType) => {
@@ -272,6 +299,7 @@ function ProcessCanvasInner({ processId, canEdit }: ProcessCanvasProps) {
           onDrop={onDrop}
           onInit={setRfInstance}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           nodesDraggable={canEdit}
           nodesConnectable={canEdit}
           elementsSelectable={true}

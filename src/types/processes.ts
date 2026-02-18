@@ -1,3 +1,6 @@
+import type { Profile } from './index'
+export type { Profile }
+
 export type ProcessNodeType =
   | 'start'
   | 'end'
@@ -24,6 +27,7 @@ export interface ProcessNode {
   description: string | null
   x_position: number
   y_position: number
+  tagged_profile_ids: string[]
   created_at: string
 }
 
