@@ -145,7 +145,7 @@ export function useInviteEmployee() {
         // Step 2: Generate magic link for password setup
         console.log('useInviteEmployee: Generating magic link')
         const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
-        const redirectUrl = `${appUrl}/dashboard`
+        const redirectUrl = `${appUrl}/onboarding`
         console.log('useInviteEmployee: VITE_APP_URL:', import.meta.env.VITE_APP_URL)
         console.log('useInviteEmployee: window.location.origin:', window.location.origin)
         console.log('useInviteEmployee: Final appUrl:', appUrl)

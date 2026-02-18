@@ -9,6 +9,7 @@ import Signup from './pages/Signup'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
+import Onboarding from './pages/Onboarding'
 import Profile from './pages/Profile'
 import AdminPanel from './pages/AdminPanel'
 import ManagerPanel from './pages/ManagerPanel'
@@ -33,6 +34,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/share/:slug" element={<PublicShare />} />
+          <Route path="/onboarding" element={<Onboarding />} />
           
           <Route
             path="/dashboard"

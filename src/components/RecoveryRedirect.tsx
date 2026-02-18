@@ -2,22 +2,30 @@ import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 /**
- * When user lands on / with recovery tokens in the hash (from password reset email),
- * redirect to /reset-password and preserve the hash so Supabase can establish the session.
+ * Handles Supabase auth callbacks that land on / when the redirectTo URL
+ * falls back to the site root (e.g. when the full path isn't in the allowed-
+ * redirect-URLs list in Supabase).
+ *
+ * - type=recovery   → /reset-password  (password-reset email)
+ * - type=magiclink  → /onboarding      (invite email for new employees)
+ * - anything else   → /dashboard
  */
 export function RecoveryRedirect() {
   const navigate = useNavigate()
 
   useEffect(() => {
     const hash = window.location.hash
-    const hasRecovery = hash && (
-      hash.includes('type=recovery') ||
-      (hash.includes('access_token=') && hash.includes('type='))
-    )
-    if (hasRecovery) {
+
+    if (hash && hash.includes('type=recovery')) {
       window.location.replace(`${window.location.origin}/reset-password${hash}`)
       return
     }
+
+    if (hash && hash.includes('type=magiclink')) {
+      window.location.replace(`${window.location.origin}/onboarding${hash}`)
+      return
+    }
+
     navigate('/dashboard', { replace: true })
   }, [navigate])
 

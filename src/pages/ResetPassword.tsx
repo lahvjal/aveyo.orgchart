@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useProfile } from '../hooks/useProfile'
 import { Card, CardContent, CardHeader } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -15,6 +16,7 @@ export default function ResetPassword() {
   const [complete, setComplete] = useState(false)
   const [ready, setReady] = useState(false)
   const { user, loading: authLoading, updatePassword } = useAuth()
+  const { data: profile, isLoading: profileLoading } = useProfile()
   const navigate = useNavigate()
 
   // After recovery link, session is established from URL hash
@@ -22,6 +24,14 @@ export default function ResetPassword() {
     if (authLoading) return
     setReady(true)
   }, [authLoading])
+
+  // If the authenticated user hasn't finished onboarding, send them there
+  useEffect(() => {
+    if (!ready || !user || profileLoading) return
+    if (profile && !profile.onboarding_completed) {
+      navigate('/onboarding', { replace: true })
+    }
+  }, [ready, user, profile, profileLoading, navigate])
 
   const handleSetPassword = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -56,7 +56,7 @@ export function useResendInvite() {
           type: 'magiclink',
           email: profile.email,
           options: {
-            redirectTo: `${appUrl}/dashboard`,
+            redirectTo: `${appUrl}/onboarding`,
           },
         })
 
