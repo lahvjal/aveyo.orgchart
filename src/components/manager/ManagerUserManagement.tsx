@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useProfiles, useUpdateProfile } from '../../hooks/useProfile'
+import { useProfiles, useUpdateProfile, useProfileBranch } from '../../hooks/useProfile'
 import { useDepartments } from '../../lib/queries'
 import { useUserAuthStatus, useResendInvite, hasUserLoggedIn } from '../../hooks/useResendInvite'
 import { usePermissions } from '../../hooks/usePermissions'
@@ -24,6 +24,13 @@ export function ManagerUserManagement() {
   const resendInvite = useResendInvite()
   const { getTeamMembers } = usePermissions()
   const { data: currentManager } = useProfile()
+  const { data: branchProfiles } = useProfileBranch(currentManager?.id)
+
+  // Managers the current user can assign: themselves + any managers in their reporting chain
+  const assignableManagers = useMemo(() => [
+    ...(currentManager ? [currentManager] : []),
+    ...((branchProfiles ?? []).filter((p) => p.is_manager && p.id !== currentManager?.id)),
+  ], [currentManager, branchProfiles])
 
   const [editingUser, setEditingUser] = useState<Profile | null>(null)
   const [showInviteDialog, setShowInviteDialog] = useState(false)
@@ -86,7 +93,7 @@ export function ManagerUserManagement() {
     await updateProfile.mutateAsync({
       id: editingUser.id,
       job_title: formData.job_title,
-      manager_id: currentManager.id, // Always keep the current manager as manager
+      manager_id: formData.manager_id || currentManager.id,
       department_id: formData.department_id || null,
       job_description: formData.job_description || null,
     })
@@ -159,15 +166,33 @@ export function ManagerUserManagement() {
 
               <div className="space-y-2">
                 <Label htmlFor="manager">Manager</Label>
-                <Input
-                  id="manager"
-                  type="text"
-                  value={currentManager.full_name}
-                  disabled
-                  className="bg-muted cursor-not-allowed"
-                />
+                {assignableManagers.length > 1 ? (
+                  <select
+                    id="manager"
+                    value={formData.manager_id}
+                    onChange={(e) => setFormData(prev => ({ ...prev, manager_id: e.target.value }))}
+                    disabled={updateProfile.isPending}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {assignableManagers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.full_name}{m.id === currentManager?.id ? ' (you)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    id="manager"
+                    type="text"
+                    value={currentManager.full_name}
+                    disabled
+                    className="bg-muted cursor-not-allowed"
+                  />
+                )}
                 <p className="text-xs text-muted-foreground">
-                  Team members report to you. This cannot be changed.
+                  {assignableManagers.length > 1
+                    ? 'Select the manager this person reports to. Only managers in your team are shown.'
+                    : 'This team member reports directly to you.'}
                 </p>
               </div>
 
