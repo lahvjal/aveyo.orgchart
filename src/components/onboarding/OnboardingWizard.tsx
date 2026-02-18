@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
 import { Card, CardContent, CardHeader } from '../ui/card'
 import { Button } from '../ui/button'
@@ -20,7 +20,7 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
   const [currentStep, setCurrentStep] = useState<Step>('welcome')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const navigate = useNavigate()
+  const queryClient = useQueryClient()
 
   // Form state
   const [password, setPassword] = useState('')
@@ -88,6 +88,9 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
 
       if (updateError) throw updateError
 
+      // Bust the cached profile so Dashboard reads onboarding_completed: true
+      await queryClient.invalidateQueries({ queryKey: ['profile'] })
+
       setCurrentStep('complete')
     } catch (err) {
       console.error('Error updating profile:', err)
@@ -99,7 +102,6 @@ export function OnboardingWizard({ profile, onComplete }: OnboardingWizardProps)
 
   const handleComplete = () => {
     onComplete()
-    navigate('/dashboard')
   }
 
   const renderStep = () => {

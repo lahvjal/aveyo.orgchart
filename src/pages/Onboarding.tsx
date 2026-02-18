@@ -48,7 +48,10 @@ export default function Onboarding() {
   return (
     <OnboardingWizard
       profile={profile}
-      onComplete={() => navigate('/dashboard', { replace: true })}
+      onComplete={() => {
+        // Hard redirect clears any remaining stale React Query cache
+        window.location.replace('/dashboard')
+      }}
     />
   )
 }
