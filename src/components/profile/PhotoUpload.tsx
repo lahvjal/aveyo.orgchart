@@ -98,7 +98,7 @@ export function PhotoUpload({ currentPhotoUrl, userName, userId, onPhotoUploaded
   return (
     <div className={isSmall ? 'flex flex-col items-center gap-1' : 'flex flex-col items-center gap-4'}>
       <div className="relative">
-        <Avatar className={isSmall ? 'h-10 w-10' : 'h-32 w-32'}>
+        <Avatar className={isSmall ? 'h-[60px] w-[60px]' : 'h-32 w-32'}>
           {currentPhotoUrl && (
             <AvatarImage src={currentPhotoUrl} alt={userName} />
           )}
