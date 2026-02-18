@@ -14,6 +14,7 @@ import Profile from './pages/Profile'
 import AdminPanel from './pages/AdminPanel'
 import ManagerPanel from './pages/ManagerPanel'
 import PublicShare from './pages/PublicShare'
+import Processes from './pages/Processes'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -75,6 +76,17 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <ManagerPanel />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/processes"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Processes />
                 </Layout>
               </ProtectedRoute>
             }

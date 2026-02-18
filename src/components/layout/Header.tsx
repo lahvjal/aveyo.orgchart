@@ -51,6 +51,12 @@ export function Header() {
             >
               My Profile
             </Link>
+            <Link
+              to="/processes"
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Processes
+            </Link>
             {isManager && (
               <Link
                 to="/manager"
