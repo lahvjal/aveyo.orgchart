@@ -88,7 +88,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex">
+    <div className="h-full flex">
       {/* Sidebar */}
       <div className="w-80 border-r bg-white p-4 overflow-y-auto">
         <div className="mb-6">
