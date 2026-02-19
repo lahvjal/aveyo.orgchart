@@ -43,6 +43,7 @@ export function usePermissions() {
   return {
     isAdmin: profile?.is_admin || false,
     isManager: profile?.is_manager || false,
+    isExecutive: profile?.is_executive || false,
     canEditProfile: (profileId: string) => {
       return profile?.is_admin || profile?.id === profileId
     },

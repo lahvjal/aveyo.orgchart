@@ -11,7 +11,7 @@ import { LogOut } from 'lucide-react'
 export function Header() {
   const { signOut } = useAuth()
   const { data: profile } = useProfile()
-  const { isAdmin, isManager } = usePermissions()
+  const { isAdmin, isManager, isExecutive } = usePermissions()
   const { data: orgSettings } = useOrganizationSettings()
   const navigate = useNavigate()
 
@@ -72,6 +72,14 @@ export function Header() {
               >
                 Admin Panel
               </Link>
+            )}
+            {(isExecutive || isAdmin) && (
+              <a
+                href="https://kpi.aveyo.com"
+                className="text-sm text-muted-foreground hover:text-foreground"
+              >
+                KPI Dashboard
+              </a>
             )}
           </nav>
         </div>

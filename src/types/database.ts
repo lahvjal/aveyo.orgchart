@@ -28,6 +28,7 @@ export interface Database {
           social_links: Json | null
           is_admin: boolean
           is_manager: boolean
+          is_executive: boolean
           onboarding_completed: boolean
           created_at: string
           updated_at: string
@@ -50,6 +51,7 @@ export interface Database {
           social_links?: Json | null
           is_admin?: boolean
           is_manager?: boolean
+          is_executive?: boolean
           onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
@@ -72,6 +74,7 @@ export interface Database {
           social_links?: Json | null
           is_admin?: boolean
           is_manager?: boolean
+          is_executive?: boolean
           onboarding_completed?: boolean
           created_at?: string
           updated_at?: string

@@ -6,7 +6,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { JobDescriptionEditor } from '../ui/JobDescriptionEditor'
-import { Loader2, Shield, Users, Info } from 'lucide-react'
+import { Loader2, Shield, Users, Info, BarChart2 } from 'lucide-react'
 import { PhotoUpload } from '../profile/PhotoUpload'
 
 interface AdminUserEditorProps {
@@ -29,6 +29,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
     job_description: profile.job_description || '',
     is_admin: profile.is_admin,
     is_manager: profile.is_manager || false,
+    is_executive: profile.is_executive || false,
   })
 
   // Reset form when profile changes
@@ -40,6 +41,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
       job_description: profile.job_description || '',
       is_admin: profile.is_admin,
       is_manager: profile.is_manager || false,
+      is_executive: profile.is_executive || false,
     })
     setCurrentPhotoUrl(profile.profile_photo_url)
     setDepartmentAutoFilled(false)
@@ -77,6 +79,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
       job_description: formData.job_description || null,
       is_admin: formData.is_admin,
       is_manager: formData.is_manager,
+      is_executive: formData.is_executive,
     } as any)
 
     onSaved?.()
@@ -199,6 +202,19 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
           <Label htmlFor="is_manager" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
             Manager
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="is_executive"
+            checked={formData.is_executive}
+            onChange={(e) => setFormData(prev => ({ ...prev, is_executive: e.target.checked }))}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <Label htmlFor="is_executive" className="flex items-center gap-2">
+            <BarChart2 className="h-4 w-4" />
+            Executive (KPI Dashboard access)
           </Label>
         </div>
       </div>
