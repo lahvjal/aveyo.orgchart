@@ -4,7 +4,8 @@
 @font-face {
   font-family: 'PPTelegraf';
   src: url('/font/Telegraf/PPTelegraf-Ultralight.woff2') format('woff2'),
-       url('/font/Telegraf/PPTelegraf-Ultralight.woff') format('woff');
+       url('/font/Telegraf/PPTelegraf-Ultralight.woff') format('woff'),
+       url('/font/Telegraf/PPTelegraf-Ultralight.ttf') format('truetype');
   font-weight: 200;
   font-style: normal;
   font-display: swap;
@@ -13,7 +14,8 @@
 @font-face {
   font-family: 'PPTelegraf';
   src: url('/font/Telegraf/PPTelegraf-Regular.woff2') format('woff2'),
-       url('/font/Telegraf/PPTelegraf-Regular.woff') format('woff');
+       url('/font/Telegraf/PPTelegraf-Regular.woff') format('woff'),
+       url('/font/Telegraf/PPTelegraf-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -22,7 +24,8 @@
 @font-face {
   font-family: 'PPTelegraf';
   src: url('/font/Telegraf/PPTelegraf-Bold.woff2') format('woff2'),
-       url('/font/Telegraf/PPTelegraf-Bold.woff') format('woff');
+       url('/font/Telegraf/PPTelegraf-Bold.woff') format('woff'),
+       url('/font/Telegraf/PPTelegraf-Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -31,7 +34,8 @@
 @font-face {
   font-family: 'PPTelegraf';
   src: url('/font/Telegraf/PPTelegraf-Ultrabold.woff2') format('woff2'),
-       url('/font/Telegraf/PPTelegraf-Ultrabold.woff') format('woff');
+       url('/font/Telegraf/PPTelegraf-Ultrabold.woff') format('woff'),
+       url('/font/Telegraf/PPTelegraf-Ultrabold.ttf') format('truetype');
   font-weight: 800;
   font-style: normal;
   font-display: swap;
@@ -40,7 +44,8 @@
 @font-face {
   font-family: 'PPTelegraf';
   src: url('/font/Telegraf/PPTelegraf-Black.woff2') format('woff2'),
-       url('/font/Telegraf/PPTelegraf-Black.woff') format('woff');
+       url('/font/Telegraf/PPTelegraf-Black.woff') format('woff'),
+       url('/font/Telegraf/PPTelegraf-Black.ttf') format('truetype');
   font-weight: 900;
   font-style: normal;
   font-display: swap;
