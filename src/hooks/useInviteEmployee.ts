@@ -86,10 +86,20 @@ export function useInviteEmployee() {
         )
 
         if (createError || !createData?.success) {
-          const errMsg = createData?.error || createError?.message || 'Failed to create user account'
+          let errMsg = createData?.error || createError?.message || 'Failed to create user account'
+
+          // Extract the real error body from the edge function response (non-2xx puts
+          // it in error.context rather than data, which is null for non-2xx responses).
+          if (createError && !createData) {
+            try {
+              const errBody = await (createError as any).context?.json?.()
+              if (errBody?.error) errMsg = errBody.error
+            } catch (_) {}
+          }
+
           console.error('useInviteEmployee: Error creating user:', errMsg)
 
-          if (errMsg.includes('already registered')) {
+          if (errMsg.toLowerCase().includes('already registered') || errMsg.toLowerCase().includes('already been registered')) {
             return { success: false, error: 'This email address is already registered' }
           }
           return { success: false, error: errMsg }
@@ -139,11 +149,20 @@ export function useInviteEmployee() {
         )
 
         if (linkError || !linkData?.success || !linkData?.actionLink) {
-          console.error('useInviteEmployee: Error generating magic link:', linkData?.error || linkError)
+          let linkErrMsg = linkData?.error || 'User created but failed to generate invitation link'
+
+          if (linkError && !linkData) {
+            try {
+              const errBody = await (linkError as any).context?.json?.()
+              if (errBody?.error) linkErrMsg = `Failed to generate invitation link: ${errBody.error}`
+            } catch (_) {}
+          }
+
+          console.error('useInviteEmployee: Error generating magic link:', linkErrMsg)
           return {
             success: false,
             userId: newUserId,
-            error: 'User created but failed to generate invitation link',
+            error: linkErrMsg,
           }
         }
 

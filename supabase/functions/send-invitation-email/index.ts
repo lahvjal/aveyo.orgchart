@@ -32,7 +32,18 @@ serve(async (req) => {
 
   try {
     console.log('Edge Function: Request received')
-    
+
+    if (!RESEND_API_KEY) {
+      console.error('Edge Function: RESEND_API_KEY is not configured')
+      return new Response(
+        JSON.stringify({ error: 'Email service is not configured. Please set the RESEND_API_KEY secret.' }),
+        {
+          status: 500,
+          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+        }
+      )
+    }
+
     // Parse request body first to get userId
     const requestData: InvitationEmailRequest = await req.json()
     const { userId, email, fullName, jobTitle, invitedBy, magicLink } = requestData
