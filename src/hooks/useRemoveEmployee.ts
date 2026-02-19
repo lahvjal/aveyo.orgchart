@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabaseAdmin } from '../lib/supabaseAdmin'
 import { supabase } from '../lib/supabase'
 
 interface RemoveEmployeeResult {
@@ -9,10 +8,10 @@ interface RemoveEmployeeResult {
 
 /**
  * Hook for removing employees (admin only)
- * 
+ *
  * This hook:
- * 1. Verifies the current user is an admin
- * 2. Deletes the user account using supabaseAdmin
+ * 1. Verifies the current user is an admin (server-side in edge function)
+ * 2. Deletes the user account via the admin-user-ops edge function
  * 3. The ON DELETE CASCADE constraint automatically removes the profile
  */
 export function useRemoveEmployee() {
@@ -22,58 +21,30 @@ export function useRemoveEmployee() {
     mutationFn: async (userId: string): Promise<RemoveEmployeeResult> => {
       console.log('useRemoveEmployee: Starting removal process for user', userId)
 
-      // Check if admin client is available
-      if (!supabaseAdmin) {
-        console.error('useRemoveEmployee: Admin client not configured')
-        return {
-          success: false,
-          error: 'Admin features are not configured. Please contact your system administrator.',
-        }
-      }
-
-      // Get current user to verify admin status
+      // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       if (!currentUser) {
-        return {
-          success: false,
-          error: 'You must be logged in to remove employees',
-        }
+        return { success: false, error: 'You must be logged in to remove employees' }
       }
 
-      // Verify current user is an admin
-      const { data: currentProfile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', currentUser.id)
-        .single()
-
-      if (!currentProfile || !(currentProfile as any).is_admin) {
-        return {
-          success: false,
-          error: 'Only administrators can remove employees',
-        }
-      }
-
-      // Prevent self-deletion
+      // Prevent self-deletion (client-side guard; edge function also enforces this)
       if (currentUser.id === userId) {
-        return {
-          success: false,
-          error: 'You cannot remove your own account',
-        }
+        return { success: false, error: 'You cannot remove your own account' }
       }
 
       try {
-        // Delete the user account using admin client
-        // This will cascade delete the profile due to ON DELETE CASCADE
-        console.log('useRemoveEmployee: Deleting user account')
-        const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(userId)
+        const { data, error } = await supabase.functions.invoke('admin-user-ops', {
+          body: {
+            action: 'deleteUser',
+            userId: currentUser.id,
+            targetUserId: userId,
+          },
+        })
 
-        if (deleteError) {
-          console.error('useRemoveEmployee: Error deleting user:', deleteError)
-          return {
-            success: false,
-            error: deleteError.message || 'Failed to remove employee',
-          }
+        if (error || !data?.success) {
+          const errMsg = data?.error || error?.message || 'Failed to remove employee'
+          console.error('useRemoveEmployee: Error deleting user:', errMsg)
+          return { success: false, error: errMsg }
         }
 
         console.log('useRemoveEmployee: Successfully removed employee')
@@ -87,7 +58,6 @@ export function useRemoveEmployee() {
       }
     },
     onSuccess: () => {
-      // Invalidate profiles query to refresh the list
       queryClient.invalidateQueries({ queryKey: ['profiles'] })
     },
   })

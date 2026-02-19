@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { supabaseAdmin } from '../lib/supabaseAdmin'
 import { supabase } from '../lib/supabase'
 import { sendEmployeeInvitationEmail } from '../lib/notifications'
 
@@ -23,10 +22,10 @@ interface InviteEmployeeResult {
 
 /**
  * Hook for inviting new employees
- * 
+ *
  * This hook:
- * 1. Creates a new user account in Supabase Auth
- * 2. Generates a magic link for password setup
+ * 1. Creates a new user account via the admin-user-ops edge function
+ * 2. Generates a magic link for password setup (server-side)
  * 3. Sends an invitation email with the magic link
  * 4. The handle_new_user trigger automatically creates the profile
  */
@@ -37,25 +36,13 @@ export function useInviteEmployee() {
     mutationFn: async (data: InviteEmployeeData): Promise<InviteEmployeeResult> => {
       console.log('useInviteEmployee: Starting invitation process for', data.email)
 
-      // Check if admin client is available
-      if (!supabaseAdmin) {
-        console.error('useInviteEmployee: Admin client not configured')
-        return {
-          success: false,
-          error: 'Admin features are not configured. Please contact your system administrator.',
-        }
-      }
-
-      // Get current user to include in invitation email
+      // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       if (!currentUser) {
-        return {
-          success: false,
-          error: 'You must be logged in to invite employees',
-        }
+        return { success: false, error: 'You must be logged in to invite employees' }
       }
 
-      // Get current user's profile for the "invited by" name and permission check
+      // Get current user's profile for permission check and "invited by" name
       const { data: currentProfile } = await supabase
         .from('profiles')
         .select('full_name, is_admin, is_manager')
@@ -69,108 +56,98 @@ export function useInviteEmployee() {
       // Validate manager mode permissions
       if (data.managerMode) {
         if (!isManager && !isAdmin) {
-          return {
-            success: false,
-            error: 'You do not have permission to invite team members',
-          }
+          return { success: false, error: 'You do not have permission to invite team members' }
         }
         if (!data.managerId || data.managerId !== currentUser.id) {
-          return {
-            success: false,
-            error: 'Manager ID must be set to your user ID in manager mode',
-          }
+          return { success: false, error: 'Manager ID must be set to your user ID in manager mode' }
         }
       }
 
       try {
-        // Construct full name from first and last name
         const fullName = `${data.firstName} ${data.lastName}`.trim()
 
-        // Step 1: Create user account with admin client
-        console.log('useInviteEmployee: Creating user account')
-        const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
-          email: data.email,
-          email_confirm: true, // Auto-confirm email since we're sending magic link
-          user_metadata: {
-            full_name: fullName,
-            job_title: data.jobTitle,
-            start_date: data.startDate || new Date().toISOString().split('T')[0],
-          },
-        })
+        // Step 1: Create user account via edge function
+        console.log('useInviteEmployee: Creating user account via edge function')
+        const { data: createData, error: createError } = await supabase.functions.invoke(
+          'admin-user-ops',
+          {
+            body: {
+              action: 'createUser',
+              userId: currentUser.id,
+              email: data.email,
+              emailConfirm: true,
+              userMetadata: {
+                full_name: fullName,
+                job_title: data.jobTitle,
+                start_date: data.startDate || new Date().toISOString().split('T')[0],
+              },
+            },
+          }
+        )
 
-        if (createError) {
-          console.error('useInviteEmployee: Error creating user:', createError)
-          
-          // Handle specific error cases
-          if (createError.message.includes('already registered')) {
-            return {
-              success: false,
-              error: 'This email address is already registered',
-            }
+        if (createError || !createData?.success) {
+          const errMsg = createData?.error || createError?.message || 'Failed to create user account'
+          console.error('useInviteEmployee: Error creating user:', errMsg)
+
+          if (errMsg.includes('already registered')) {
+            return { success: false, error: 'This email address is already registered' }
           }
-          
-          return {
-            success: false,
-            error: createError.message || 'Failed to create user account',
-          }
+          return { success: false, error: errMsg }
         }
 
-        if (!newUser.user) {
-          console.error('useInviteEmployee: No user returned from createUser')
-          return {
-            success: false,
-            error: 'Failed to create user account',
-          }
-        }
-
-        console.log('useInviteEmployee: User created successfully:', newUser.user.id)
+        const newUserId = createData.user.id
+        console.log('useInviteEmployee: User created successfully:', newUserId)
 
         // Step 1.5: Update profile with additional fields (manager, department)
         if (data.managerId || data.departmentId) {
           console.log('useInviteEmployee: Updating profile with manager/department')
-          const { error: updateError } = await (supabaseAdmin as any)
-            .from('profiles')
-            .update({
-              manager_id: data.managerId || null,
-              department_id: data.departmentId || null,
-            })
-            .eq('id', newUser.user.id)
+          const { data: updateData, error: updateError } = await supabase.functions.invoke(
+            'admin-user-ops',
+            {
+              body: {
+                action: 'updateProfile',
+                userId: currentUser.id,
+                targetUserId: newUserId,
+                profileData: {
+                  manager_id: data.managerId || null,
+                  department_id: data.departmentId || null,
+                },
+              },
+            }
+          )
 
-          if (updateError) {
-            console.warn('useInviteEmployee: Failed to update manager/department:', updateError)
+          if (updateError || !updateData?.success) {
+            console.warn('useInviteEmployee: Failed to update manager/department:', updateData?.error || updateError)
             // Don't fail the entire invitation for this
           }
         }
 
-        // Step 2: Generate magic link for password setup
+        // Step 2: Generate magic link via edge function
         console.log('useInviteEmployee: Generating magic link')
         const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
-        const redirectUrl = `${appUrl}/onboarding`
-        console.log('useInviteEmployee: VITE_APP_URL:', import.meta.env.VITE_APP_URL)
-        console.log('useInviteEmployee: window.location.origin:', window.location.origin)
-        console.log('useInviteEmployee: Final appUrl:', appUrl)
-        console.log('useInviteEmployee: Full redirectTo:', redirectUrl)
-        
-        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-          type: 'magiclink',
-          email: data.email,
-          options: {
-            redirectTo: redirectUrl,
-          },
-        })
-        
-        console.log('useInviteEmployee: Generated magic link:', linkData?.properties?.action_link)
+        const { data: linkData, error: linkError } = await supabase.functions.invoke(
+          'admin-user-ops',
+          {
+            body: {
+              action: 'generateLink',
+              userId: currentUser.id,
+              email: data.email,
+              linkType: 'magiclink',
+              redirectTo: `${appUrl}/onboarding`,
+            },
+          }
+        )
 
-        if (linkError || !linkData.properties?.action_link) {
-          console.error('useInviteEmployee: Error generating magic link:', linkError)
+        if (linkError || !linkData?.success || !linkData?.actionLink) {
+          console.error('useInviteEmployee: Error generating magic link:', linkData?.error || linkError)
           return {
             success: false,
-            userId: newUser.user.id,
+            userId: newUserId,
             error: 'User created but failed to generate invitation link',
           }
         }
 
-        const magicLink = linkData.properties.action_link
+        const magicLink = linkData.actionLink
         console.log('useInviteEmployee: Magic link generated successfully')
 
         // Step 3: Send invitation email
@@ -187,18 +164,14 @@ export function useInviteEmployee() {
           console.error('useInviteEmployee: Error sending email:', emailResult.error)
           return {
             success: false,
-            userId: newUser.user.id,
+            userId: newUserId,
             email: data.email,
             error: 'User created but failed to send invitation email. Please manually send the invitation.',
           }
         }
 
         console.log('useInviteEmployee: Invitation process completed successfully')
-        return {
-          success: true,
-          userId: newUser.user.id,
-          email: data.email,
-        }
+        return { success: true, userId: newUserId, email: data.email }
       } catch (error) {
         console.error('useInviteEmployee: Unexpected error:', error)
         return {
@@ -209,7 +182,6 @@ export function useInviteEmployee() {
     },
     onSuccess: (result) => {
       if (result.success) {
-        // Invalidate profiles query to refresh the user list
         queryClient.invalidateQueries({ queryKey: ['profiles'] })
         console.log('useInviteEmployee: Success, profiles query invalidated')
       }

@@ -82,8 +82,11 @@ serve(async (req) => {
 
     console.log('Sending invitation email to:', email)
 
-    // Logo as base64 (logo-icon.svg) for reliable display in email clients
-    const logoDataUri = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9Ijc5IiB2aWV3Qm94PSIwIDAgMTAwIDc5IiBmaWxsPSJub25lIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPgo8ZyBjbGlwLXBhdGg9InVybCgjY2xpcDBfMzYxNl8yNzAyMykiPgo8cGF0aCBkPSJNOTkuOTk5OCA3OUg4MS4wODY2Qzc0LjQ5MzkgNzkgNjguNzQxNyA3NC41MTE4IDY3LjEyNjEgNjguMTEwNkw1MC4xMzA0IDAuOTUxMTcySDY4Ljg0NzdDNzUuNDI0MSAwLjk1MTE3MiA4MS4xNjgyIDUuNDE0ODQgODIuODAwMSAxMS43OTk3TDk5Ljk5MTcgNzlIOTkuOTk5OFoiIGZpbGw9IiMyMTIxMjAiLz4KPHBhdGggZD0iTTAgNzkuMDAwNUgzMi41MjI4QzM3Ljc2OTMgNzkuMDAwNSA0Mi42MDc3IDc2LjEzOTIgNDUuMTM3MSA3MS41MzY2TDYwLjc3MDIgNDMuMTExM0gyOC40MjY5QzIzLjIwNSA0My4xMTEzIDE4LjM5MSA0NS45NDgxIDE1Ljg0NTMgNTAuNTE4MUwwIDc5LjAwMDVaIiBmaWxsPSIjMjEyMTIwIi8+CjxwYXRoIGQ9Ik0wLjI2OTA0MyAzNi44NDA0SDIxLjg4MjlDMjcuMTI5NCAzNi44NDA0IDMxLjk2NzggMzMuOTc5IDM0LjQ5NzIgMjkuMzc2NEw1MC4xMzAzIDAuOTUxMTcySDI4LjY5NTlDMjMuNDc0IDAuOTUxMTcyIDE4LjY2IDMuNzg3OTcgMTYuMTE0MyA4LjM1NzkyTDAuMjY5MDQzIDM2Ljg0MDRaIiBmaWxsPSIjMjEyMTIwIi8+CjwvZz4KPGRlZnM+CjxjbGlwUGF0aCBpZD0iY2xpcDBfMzYxNl8yNzAyMyI+CjxyZWN0IHdpZHRoPSIxMDAiIGhlaWdodD0iNzguMDQ4OCIgZmlsbD0id2hpdGUiIHRyYW5zZm9ybT0idHJhbnNsYXRlKDAgMC45NTExNzIpIi8+CjwvY2xpcFBhdGg+CjwvZGVmcz4KPC9zdmc+Cg=='
+    // Use a hosted PNG logo for email client compatibility.
+    // Gmail and most email clients block data: URIs and don't support SVG.
+    // The white PNG version should be hosted at this URL.
+    const APP_URL = Deno.env.get('APP_URL') || 'https://orgchart.aveyo.com'
+    const logoUrl = `${APP_URL}/images/logo-white.png`
 
     // Send email via Resend
     const emailHtml = `
@@ -94,7 +97,7 @@ serve(async (req) => {
             body { font-family: Arial, sans-serif; line-height: 1.6; color: #111; background: #fff; margin: 0; padding: 0; }
             .container { max-width: 600px; margin: 0 auto; padding: 20px; }
             .header { background: #000; color: #fff; padding: 32px 30px; text-align: center; border-radius: 8px 8px 0 0; }
-            .header img { display: block; margin: 0 auto 16px; height: 48px; width: auto; filter: brightness(0) invert(1); }
+            .header img { display: block; margin: 0 auto 16px; height: 48px; width: auto; }
             .header h1 { margin: 0; font-size: 20px; font-weight: 600; }
             .content { background: #fff; padding: 30px; border: 1px solid #e5e5e5; border-top: none; border-radius: 0 0 8px 8px; }
             .button { display: inline-block; background: #000; color: #fff !important; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 20px 0; font-weight: bold; }
@@ -106,7 +109,7 @@ serve(async (req) => {
         <body>
           <div class="container">
             <div class="header">
-              <img src="${logoDataUri}" alt="Aveyo" width="60" height="47" />
+              <img src="${logoUrl}" alt="Aveyo" width="60" height="47" />
               <h1>You've been invited to Aveyo's OrgChart App</h1>
             </div>
             <div class="content">

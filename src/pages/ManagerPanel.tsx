@@ -1,8 +1,10 @@
 import { usePermissions } from '../hooks/usePermissions'
 import { Navigate } from 'react-router-dom'
 import { ManagerUserManagement } from '../components/manager/ManagerUserManagement'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function ManagerPanel() {
+  usePageTitle('Manager Panel')
   const { isManager, isLoading } = usePermissions()
 
   if (isLoading) {

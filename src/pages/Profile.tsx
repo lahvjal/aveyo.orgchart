@@ -1,7 +1,9 @@
 import { useProfile } from '../hooks/useProfile'
 import { ProfileEditor } from '../components/profile/ProfileEditor'
+import { usePageTitle } from '../hooks/usePageTitle'
 
 export default function Profile() {
+  usePageTitle('My Profile')
   const { data: profile, isLoading, error } = useProfile()
 
   if (isLoading) {

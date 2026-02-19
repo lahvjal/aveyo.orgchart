@@ -96,6 +96,7 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
   }, [profile.id, profile.start_date, profile.birthday, profile.full_name, profile.preferred_name, profile.job_title, profile.job_description, profile.phone, profile.location, profile.profile_photo_url, profile.social_links])
 
   const updateProfile = useUpdateProfile()
+  const [savedRecently, setSavedRecently] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -108,21 +109,26 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
     const formattedStartDate = formData.start_date ? formatDateForInput(formData.start_date) : formatDateForInput(profile.start_date)
     const formattedBirthday = formData.birthday ? formatDateForInput(formData.birthday) : null
 
-    await updateProfile.mutateAsync({
-      id: profile.id,
-      full_name: fullName,
-      preferred_name: formData.preferred_name || null,
-      job_title: formData.job_title,
-      job_description: formData.job_description || null,
-      phone: formData.phone || null,
-      location: formData.location || null,
-      start_date: formattedStartDate,
-      birthday: formattedBirthday,
-      profile_photo_url: formData.profile_photo_url || null,
-      social_links: formData.social_links,
-    } as any)
-
-    onSaved?.()
+    try {
+      await updateProfile.mutateAsync({
+        id: profile.id,
+        full_name: fullName,
+        preferred_name: formData.preferred_name || null,
+        job_title: formData.job_title,
+        job_description: formData.job_description || null,
+        phone: formData.phone || null,
+        location: formData.location || null,
+        start_date: formattedStartDate,
+        birthday: formattedBirthday,
+        profile_photo_url: formData.profile_photo_url || null,
+        social_links: formData.social_links,
+      } as any)
+      setSavedRecently(true)
+      setTimeout(() => setSavedRecently(false), 4000)
+      onSaved?.()
+    } catch {
+      // error is shown via updateProfile.isError below
+    }
   }
 
   const handlePhotoUploaded = (url: string) => {
@@ -195,8 +201,11 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
                 id="email"
                 value={profile.email}
                 disabled
-                className="bg-muted"
+                className="bg-muted cursor-not-allowed opacity-70"
               />
+              <p className="text-xs text-muted-foreground">
+                Email cannot be changed. Contact an administrator if you need to update it.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -313,9 +322,10 @@ export function ProfileEditor({ profile, onSaved }: ProfileEditorProps) {
             </div>
           )}
 
-          {updateProfile.isSuccess && (
-            <div className="bg-green-50 text-green-900 text-sm p-3 rounded-md">
-              Profile updated successfully!
+          {savedRecently && (
+            <div className="bg-green-50 border border-green-200 text-green-800 text-sm p-3 rounded-md flex items-center gap-2">
+              <span className="text-green-600">✓</span>
+              Profile saved successfully!
             </div>
           )}
 

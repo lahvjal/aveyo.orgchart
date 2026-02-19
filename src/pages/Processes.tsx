@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { ArrowLeft, Pencil, Eye, Share2 } from 'lucide-react'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuth } from '../hooks/useAuth'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { ProcessList } from '../components/processes/ProcessList'
 import { ProcessCanvas } from '../components/processes/ProcessCanvas'
 import { ProcessShareLinkManager } from '../components/processes/ProcessShareLinkManager'
@@ -11,6 +12,7 @@ import type { Process } from '../types/processes'
 import { Loader2 } from 'lucide-react'
 
 export default function Processes() {
+  usePageTitle('Processes')
   const { user } = useAuth()
   const { isAdmin, isManager, isLoading } = usePermissions()
   const [selectedProcess, setSelectedProcess] = useState<Process | null>(null)

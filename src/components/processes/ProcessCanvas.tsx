@@ -303,6 +303,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
             minZoom={0.1}
             maxZoom={2}
             defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
+            proOptions={{ hideAttribution: true }}
           >
             <Background gap={20} size={1} color="#e5e7eb" />
             <Controls />

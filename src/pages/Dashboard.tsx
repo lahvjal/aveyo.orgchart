@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useProfiles, useProfile } from '../hooks/useProfile'
 import { usePermissions } from '../hooks/usePermissions'
 import { useAuth } from '../hooks/useAuth'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { OrgChartCanvas } from '../components/org-chart/OrgChartCanvas'
 import { EmployeeSearch } from '../components/search/EmployeeSearch'
 import { ProfileCard } from '../components/profile/ProfileCard'
@@ -9,19 +10,20 @@ import { AdminUserEditorDialog } from '../components/admin/AdminUserEditorDialog
 import { OnboardingWizard } from '../components/onboarding/OnboardingWizard'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
-import { X } from 'lucide-react'
+import { X, SlidersHorizontal } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
   const { data: currentProfile, isLoading: profileLoading } = useProfile()
   const { isAdmin, isLoading: permissionsLoading } = usePermissions()
+  usePageTitle('Org Chart')
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null)
   const [editingProfile, setEditingProfile] = useState<string | null>(null)
-  // Default to the current user's department if provided
   const [selectedDepartment, setSelectedDepartment] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
   const hasInitializedDepartment = useRef(false)
-  
-  // All users can now view all profiles - the org chart is accessible to everyone
+
   const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()
 
   // Set initial department filter when currentProfile loads (only once)
@@ -36,19 +38,14 @@ export default function Dashboard() {
   console.log('Dashboard: currentProfile:', currentProfile)
   console.log('Dashboard: isAdmin:', isAdmin, 'permissionsLoading:', permissionsLoading)
 
-  // Check if user needs onboarding
   const needsOnboarding = currentProfile && !currentProfile.onboarding_completed
 
-  console.log('Dashboard: needsOnboarding:', needsOnboarding)
-
-  // Show onboarding wizard if user hasn't completed it
   if (!profileLoading && needsOnboarding && currentProfile) {
     return <OnboardingWizard profile={currentProfile} onComplete={() => window.location.reload()} />
   }
 
   console.log('Dashboard: allProfiles:', allProfiles, 'loading:', allProfilesLoading, 'error:', allProfilesError)
 
-  // Filter profiles by selected department
   const profiles = useMemo(() => {
     if (!allProfiles) return []
     if (!selectedDepartment) return allProfiles
@@ -88,27 +85,55 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="h-[calc(100vh-4rem)] flex">
+    <div className="h-[calc(100vh-4rem)] flex flex-col md:flex-row">
+      {/* Mobile: filter toggle bar */}
+      <div className="md:hidden flex items-center gap-2 px-4 py-2 border-b bg-white shrink-0">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setSidebarOpen((v) => !v)}
+          className="flex items-center gap-2"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+          {sidebarOpen ? 'Hide Filters' : 'Search & Filter'}
+        </Button>
+        {selectedDepartment && (
+          <span className="text-xs text-muted-foreground">
+            Showing {profiles.length} employee{profiles.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
       {/* Sidebar */}
-      <div className="w-80 border-r bg-white p-4 overflow-y-auto">
+      <div
+        className={`
+          bg-white border-b md:border-b-0 md:border-r md:w-80 p-4 overflow-y-auto shrink-0
+          ${sidebarOpen ? 'block' : 'hidden md:block'}
+        `}
+      >
         <div className="mb-6">
           <h2 className="text-2xl font-bold mb-2">Organization Chart</h2>
           <p className="text-sm text-muted-foreground">
-            Browse and search {selectedDepartment ? profiles.length : allProfiles?.length || 0} {selectedDepartment ? 'employees' : 'employees across all departments'}
+            Browse and search {selectedDepartment ? profiles.length : allProfiles?.length || 0}{' '}
+            {selectedDepartment ? 'employees' : 'employees across all departments'}
           </p>
         </div>
 
         <EmployeeSearch
           profiles={allProfiles || []}
-          onSelectEmployee={setSelectedProfileId}
+          onSelectEmployee={(id) => {
+            setSelectedProfileId(id)
+            setSidebarOpen(false) // Close sidebar on mobile after selecting
+          }}
           currentUserDepartmentId={currentProfile?.department_id || undefined}
           selectedDepartment={selectedDepartment}
           onDepartmentChange={setSelectedDepartment}
+          onSearchChange={setSearchQuery}
         />
       </div>
 
       {/* Main content - Org Chart */}
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
         {profiles.length === 0 && selectedDepartment ? (
           <div className="flex items-center justify-center h-full">
             <Card className="p-8 text-center">
@@ -125,13 +150,15 @@ export default function Dashboard() {
             currentUserId={user?.id}
             currentUserDepartmentId={currentProfile?.department_id || undefined}
             onNodeClick={setSelectedProfileId}
+            selectedProfileId={selectedProfileId}
+            searchQuery={searchQuery}
           />
         )}
 
         {/* Selected profile detail */}
         {selectedProfile && (
-          <div className="absolute top-4 right-4 w-96 max-h-[calc(100vh-8rem)] overflow-y-auto">
-            <div className="relative bg-white">
+          <div className="absolute top-2 right-2 left-2 md:left-auto md:top-4 md:right-4 md:w-96 max-h-[calc(100%-1rem)] overflow-y-auto z-10">
+            <div className="relative bg-white shadow-lg rounded-lg">
               <Button
                 variant="ghost"
                 size="icon"

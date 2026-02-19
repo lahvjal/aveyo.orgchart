@@ -13,6 +13,7 @@ interface EmployeeSearchProps {
   currentUserDepartmentId?: string
   selectedDepartment?: string | null
   onDepartmentChange?: (departmentId: string | null) => void
+  onSearchChange?: (query: string) => void
 }
 
 export function EmployeeSearch({ 
@@ -20,9 +21,15 @@ export function EmployeeSearch({
   onSelectEmployee, 
   currentUserDepartmentId,
   selectedDepartment: propSelectedDepartment,
-  onDepartmentChange
+  onDepartmentChange,
+  onSearchChange,
 }: EmployeeSearchProps) {
   const [searchQuery, setSearchQuery] = useState('')
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value)
+    onSearchChange?.(value)
+  }
   // Use prop if explicitly provided (even if null), otherwise default to the current user's department
   const selectedDepartment = propSelectedDepartment !== undefined 
     ? propSelectedDepartment 
@@ -66,7 +73,7 @@ export function EmployeeSearch({
         <Input
           placeholder="Search employees..."
           value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
           className="pl-10"
         />
         {searchQuery && (
@@ -74,7 +81,7 @@ export function EmployeeSearch({
             variant="ghost"
             size="icon"
             className="absolute right-2 top-1/2 transform -translate-y-1/2 h-6 w-6"
-            onClick={() => setSearchQuery('')}
+            onClick={() => handleSearchChange('')}
           >
             <X className="h-4 w-4" />
           </Button>
@@ -123,26 +130,28 @@ export function EmployeeSearch({
           filteredProfiles.map((profile) => (
             <div
               key={profile.id}
-              className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
+              className="flex items-start gap-3 p-3 rounded-lg border hover:bg-accent cursor-pointer transition-colors"
               onClick={() => onSelectEmployee(profile.id)}
             >
-              <Avatar>
+              <Avatar className="shrink-0 mt-0.5">
                 {profile.profile_photo_url && (
                   <AvatarImage src={profile.profile_photo_url} alt={profile.full_name} />
                 )}
                 <AvatarFallback>{getInitials(profile.full_name)}</AvatarFallback>
               </Avatar>
-              
+
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{profile.full_name}</p>
                 <p className="text-sm text-muted-foreground truncate">{profile.job_title}</p>
+                {profile.department && (
+                  <Badge
+                    className="mt-1 text-xs"
+                    style={{ backgroundColor: profile.department.color, color: 'white' }}
+                  >
+                    {profile.department.name}
+                  </Badge>
+                )}
               </div>
-
-              {profile.department && (
-                <Badge style={{ backgroundColor: profile.department.color, color: 'white' }}>
-                  {profile.department.name}
-                </Badge>
-              )}
             </div>
           ))
         )}

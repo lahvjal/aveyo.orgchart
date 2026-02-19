@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { usePermissions } from '../hooks/usePermissions'
 import { Navigate } from 'react-router-dom'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { DepartmentManager } from '../components/admin/DepartmentManager'
 import { UserManagement } from '../components/admin/UserManagement'
 import { LogoUpload } from '../components/admin/LogoUpload'
@@ -9,7 +10,9 @@ import { Building2, Users, Palette } from 'lucide-react'
 
 type Tab = 'departments' | 'users' | 'branding'
 
+
 export default function AdminPanel() {
+  usePageTitle('Admin Panel')
   const { isAdmin, isLoading } = usePermissions()
   const [activeTab, setActiveTab] = useState<Tab>('users')
 

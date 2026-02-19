@@ -67,13 +67,14 @@ export function JobDescriptionEditor({
       className={cn(
         'w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background',
         'focus-within:outline-none focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2',
-        disabled && 'cursor-not-allowed opacity-50',
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-text',
         'job-description-editor',
         className
       )}
       style={{ minHeight: `${minRows * 1.5 + 0.5}rem` }}
+      onClick={() => editor?.commands.focus()}
     >
-      <EditorContent editor={editor} />
+      <EditorContent editor={editor} className="h-full" />
     </div>
   )
 }

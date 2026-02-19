@@ -40,23 +40,27 @@ export function usePermissions() {
     return findTeamMembers(profile.id)
   }, [profile?.id, profile?.is_manager, allProfiles])
 
+  const isSuperAdmin = profile?.is_super_admin || false
+  const isAdmin = profile?.is_admin || isSuperAdmin
+
   return {
-    isAdmin: profile?.is_admin || false,
+    isAdmin,
     isManager: profile?.is_manager || false,
     isExecutive: profile?.is_executive || false,
+    isSuperAdmin,
     canEditProfile: (profileId: string) => {
-      return profile?.is_admin || profile?.id === profileId
+      return isAdmin || profile?.id === profileId
     },
     canEditTeamMember: (profileId: string) => {
-      if (profile?.is_admin) return true
+      if (isAdmin) return true
       if (!profile?.is_manager) return false
       return getTeamMembers.some(member => member.id === profileId)
     },
-    canManageTeam: profile?.is_admin || profile?.is_manager || false,
-    canEditOrgChart: profile?.is_admin || false,
-    canManageDepartments: profile?.is_admin || false,
-    canCreateShareLinks: profile?.is_admin || false,
-    canViewAuditLogs: profile?.is_admin || false,
+    canManageTeam: isAdmin || profile?.is_manager || false,
+    canEditOrgChart: isAdmin,
+    canManageDepartments: isAdmin,
+    canCreateShareLinks: isAdmin,
+    canViewAuditLogs: isAdmin,
     getTeamMembers: () => getTeamMembers || [],
     isLoading,
   }

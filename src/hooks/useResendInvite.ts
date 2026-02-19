@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
-import { supabaseAdmin } from '../lib/supabaseAdmin'
 import { supabase } from '../lib/supabase'
 import { sendEmployeeInvitationEmail } from '../lib/notifications'
 import type { Profile } from '../types'
@@ -20,21 +19,10 @@ export function useResendInvite() {
     mutationFn: async (profile: Profile): Promise<ResendInviteResult> => {
       console.log('useResendInvite: Resending invitation for', profile.email)
 
-      if (!supabaseAdmin) {
-        console.error('useResendInvite: Admin client not configured')
-        return {
-          success: false,
-          error: 'Admin features are not configured',
-        }
-      }
-
-      // Get current user to include in invitation email
+      // Get current user
       const { data: { user: currentUser } } = await supabase.auth.getUser()
       if (!currentUser) {
-        return {
-          success: false,
-          error: 'You must be logged in to resend invitations',
-        }
+        return { success: false, error: 'You must be logged in to resend invitations' }
       }
 
       // Get current user's profile for the "invited by" name
@@ -47,28 +35,29 @@ export function useResendInvite() {
       const invitedByName = (currentProfile as any)?.full_name || 'Administrator'
 
       try {
-        // Generate a new magic link
+        // Generate a new magic link via edge function
         console.log('useResendInvite: Generating new magic link')
         const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
-        console.log('useResendInvite: Using app URL:', appUrl)
-        
-        const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-          type: 'magiclink',
-          email: profile.email,
-          options: {
-            redirectTo: `${appUrl}/onboarding`,
-          },
-        })
 
-        if (linkError || !linkData.properties?.action_link) {
-          console.error('useResendInvite: Error generating magic link:', linkError)
-          return {
-            success: false,
-            error: 'Failed to generate invitation link',
+        const { data: linkData, error: linkError } = await supabase.functions.invoke(
+          'admin-user-ops',
+          {
+            body: {
+              action: 'generateLink',
+              userId: currentUser.id,
+              email: profile.email,
+              linkType: 'magiclink',
+              redirectTo: `${appUrl}/onboarding`,
+            },
           }
+        )
+
+        if (linkError || !linkData?.success || !linkData?.actionLink) {
+          console.error('useResendInvite: Error generating magic link:', linkData?.error || linkError)
+          return { success: false, error: 'Failed to generate invitation link' }
         }
 
-        const magicLink = linkData.properties.action_link
+        const magicLink = linkData.actionLink
         console.log('useResendInvite: Magic link generated successfully')
 
         // Send invitation email
@@ -83,17 +72,11 @@ export function useResendInvite() {
 
         if (!emailResult.success) {
           console.error('useResendInvite: Error sending email:', emailResult.error)
-          return {
-            success: false,
-            error: 'Failed to send invitation email',
-          }
+          return { success: false, error: 'Failed to send invitation email' }
         }
 
         console.log('useResendInvite: Invitation resent successfully')
-        return {
-          success: true,
-          email: profile.email,
-        }
+        return { success: true, email: profile.email }
       } catch (error) {
         console.error('useResendInvite: Unexpected error:', error)
         return {
@@ -112,41 +95,42 @@ export function useResendInvite() {
 }
 
 /**
- * Hook to get auth status for all users
+ * Hook to get auth status for all users.
  * Returns a map of userId -> last_sign_in_at
  */
 export function useUserAuthStatus() {
   return useQuery({
     queryKey: ['user-auth-status'],
     queryFn: async () => {
-      if (!supabaseAdmin) {
-        console.warn('useUserAuthStatus: Admin client not configured')
+      const { data: { user: currentUser } } = await supabase.auth.getUser()
+      if (!currentUser) {
+        console.warn('useUserAuthStatus: Not authenticated')
         return {}
       }
 
       try {
-        // Get all users from auth.users
-        const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers()
+        const { data, error } = await supabase.functions.invoke('admin-user-ops', {
+          body: { action: 'listUsers', userId: currentUser.id },
+        })
 
-        if (error) {
-          console.error('useUserAuthStatus: Error fetching users:', error)
+        if (error || !data?.success) {
+          console.error('useUserAuthStatus: Error fetching users:', data?.error || error)
           return {}
         }
 
-        // Create a map of userId -> last_sign_in_at
         const authStatusMap: Record<string, string | null> = {}
-        users.forEach(user => {
-          authStatusMap[user.id] = user.last_sign_in_at || null
-        })
+        for (const user of data.users) {
+          authStatusMap[user.id] = user.last_sign_in_at ?? null
+        }
 
-        console.log('useUserAuthStatus: Fetched auth status for', users.length, 'users')
+        console.log('useUserAuthStatus: Fetched auth status for', data.users.length, 'users')
         return authStatusMap
       } catch (error) {
         console.error('useUserAuthStatus: Unexpected error:', error)
         return {}
       }
     },
-    staleTime: 60000, // Cache for 1 minute
+    staleTime: 60000,
   })
 }
 

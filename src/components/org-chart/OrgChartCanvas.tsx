@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -22,6 +22,8 @@ interface OrgChartCanvasProps {
   currentUserId?: string
   currentUserDepartmentId?: string
   onNodeClick?: (profileId: string) => void
+  selectedProfileId?: string | null
+  searchQuery?: string
 }
 
 const nodeTypes: NodeTypes = {
@@ -33,8 +35,17 @@ function OrgChartCanvasInner({
   isAdmin, 
   currentUserId,
   currentUserDepartmentId,
-  onNodeClick 
+  onNodeClick,
+  selectedProfileId,
+  searchQuery = '',
 }: OrgChartCanvasProps) {
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
   const { nodes: initialNodes, edges: initialEdges } = useOrgChart(
     profiles,
     isAdmin,
@@ -52,6 +63,36 @@ function OrgChartCanvasInner({
     setNodes(initialNodes)
     setEdges(initialEdges)
   }, [initialNodes, initialEdges, setNodes, setEdges])
+
+  // Pan to selected profile when it changes (e.g. clicked in sidebar search)
+  useEffect(() => {
+    if (selectedProfileId) {
+      fitView({
+        nodes: [{ id: selectedProfileId }],
+        padding: 0.4,
+        duration: 600,
+        maxZoom: 1,
+      })
+    }
+  }, [selectedProfileId, fitView])
+
+  // Dim nodes that don't match the active search query
+  useEffect(() => {
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (!searchQuery) {
+          return { ...n, style: { ...n.style, opacity: 1 } }
+        }
+        const profile = n.data?.profile as Profile
+        const q = searchQuery.toLowerCase()
+        const matches =
+          profile.full_name.toLowerCase().includes(q) ||
+          profile.job_title.toLowerCase().includes(q) ||
+          profile.email.toLowerCase().includes(q)
+        return { ...n, style: { ...n.style, opacity: matches ? 1 : 0.25 } }
+      })
+    )
+  }, [searchQuery, setNodes])
 
   // Focus on user's department on initial load
   useEffect(() => {
@@ -124,22 +165,24 @@ function OrgChartCanvasInner({
         minZoom={0.1}
         maxZoom={1.5}
         defaultViewport={{ x: 0, y: 0, zoom: 0.8 }}
+        proOptions={{ hideAttribution: true }}
       >
         <Background />
         <Controls />
-        <MiniMap 
-          nodeColor={(node: any) => {
-            const profile = node.data?.profile as Profile
-            return profile?.department?.color || '#94a3b8'
-          }}
-          maskColor="rgba(0, 0, 0, 0.1)"
-        />
+        {!isMobile && (
+          <MiniMap 
+            nodeColor={(node: any) => {
+              const profile = node.data?.profile as Profile
+              return profile?.department?.color || '#94a3b8'
+            }}
+            maskColor="rgba(0, 0, 0, 0.1)"
+          />
+        )}
       </ReactFlow>
     </div>
   )
 }
 
-// Wrap with ReactFlowProvider to use useReactFlow hook
 export function OrgChartCanvas(props: OrgChartCanvasProps) {
   return (
     <ReactFlowProvider>

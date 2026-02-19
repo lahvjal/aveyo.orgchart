@@ -17,6 +17,7 @@ export interface Profile {
   is_admin: boolean
   is_manager?: boolean
   is_executive?: boolean
+  is_super_admin?: boolean
   onboarding_completed?: boolean
   created_at: string
   updated_at: string

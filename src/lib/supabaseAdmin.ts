@@ -1,30 +1,14 @@
-import { createClient } from '@supabase/supabase-js'
-import type { Database } from '../types/database'
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseServiceRoleKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
-
-if (!supabaseUrl || !supabaseServiceRoleKey) {
-  console.warn('Missing Supabase admin environment variables - admin features will be unavailable')
-}
-
 /**
- * Supabase Admin Client with service role access
- * 
- * WARNING: This client bypasses Row Level Security (RLS) policies.
- * Only use this client for admin operations that require elevated privileges.
- * 
- * Current uses:
- * - Creating user accounts (auth.admin.createUser)
- * - Generating magic links (auth.admin.generateLink)
- * 
- * SECURITY: Only call from admin-protected contexts where isAdmin is verified
+ * The Supabase admin client (service role) has been moved server-side.
+ * All admin auth operations now go through the `admin-user-ops` edge function.
+ *
+ * This file is kept as a placeholder to avoid breaking imports while the
+ * migration is in progress. It exports `null` so that any remaining
+ * references fail gracefully rather than silently.
+ *
+ * SECURITY: VITE_SUPABASE_SERVICE_ROLE_KEY must NOT be set in .env.local
+ * or any client-side environment. The service role key lives exclusively
+ * in Supabase edge function secrets.
  */
-export const supabaseAdmin = supabaseUrl && supabaseServiceRoleKey
-  ? createClient<Database>(supabaseUrl, supabaseServiceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-  : null
+
+export const supabaseAdmin = null
