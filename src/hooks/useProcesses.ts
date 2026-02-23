@@ -240,6 +240,35 @@ export function useCreateProcessEdge() {
   })
 }
 
+export function useUpdateProcessEdge() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      process_id: _process_id,
+      waypoints,
+    }: {
+      id: string
+      process_id: string
+      waypoints: { x: number; y: number }[]
+    }) => {
+      const { data, error } = await (supabase as any)
+        .from('process_edges')
+        .update({ waypoints })
+        .eq('id', id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return data as ProcessEdge
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['process-edges', variables.process_id] })
+    },
+  })
+}
+
 export function useDeleteProcessEdge() {
   const queryClient = useQueryClient()
 

@@ -24,6 +24,7 @@ import {
   useUpdateProcessNode,
   useDeleteProcessNode,
   useCreateProcessEdge,
+  useUpdateProcessEdge,
   useDeleteProcessEdge,
 } from '../../hooks/useProcesses'
 import { useProfiles } from '../../hooks/useProfile'
@@ -52,17 +53,20 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   const updateNode = useUpdateProcessNode()
   const deleteNode = useDeleteProcessNode()
   const createEdge = useCreateProcessEdge()
+  const updateEdge = useUpdateProcessEdge()
   const deleteEdge = useDeleteProcessEdge()
 
   // Mutation objects in refs — their unstable identity never enters useCallback deps
   const updateNodeRef = useRef(updateNode)
   const deleteNodeRef = useRef(deleteNode)
   const createEdgeRef = useRef(createEdge)
+  const updateEdgeRef = useRef(updateEdge)
   const deleteEdgeRef = useRef(deleteEdge)
   const createNodeRef = useRef(createNode)
   updateNodeRef.current = updateNode
   deleteNodeRef.current = deleteNode
   createEdgeRef.current = createEdge
+  updateEdgeRef.current = updateEdge
   deleteEdgeRef.current = deleteEdge
   createNodeRef.current = createNode
 
@@ -144,7 +148,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       target: e.target_node_id,
       label: e.label ?? undefined,
       type: 'process',
-      data: { canEdit },
+      data: { canEdit, waypoints: e.waypoints ?? [] },
     }))
 
     setNodes(rfNodes)
@@ -253,6 +257,34 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
     event.dataTransfer.effectAllowed = 'move'
   }, [])
 
+  const handleUpdateEdgeWaypoints = useCallback(
+    (edgeId: string, waypoints: { x: number; y: number }[]) => {
+      setEdges((eds) =>
+        eds.map((e) => (e.id === edgeId ? { ...e, data: { ...e.data, waypoints } } : e))
+      )
+      updateEdgeRef.current.mutate({ id: edgeId, process_id: processId, waypoints })
+    },
+    [processId, setEdges]
+  )
+
+  const handleReverseEdge = useCallback(
+    (edgeId: string, edgeSource: string, edgeTarget: string) => {
+      deleteEdgeRef.current.mutate({ id: edgeId, process_id: processId })
+      createEdgeRef.current.mutate(
+        { process_id: processId, source_node_id: edgeTarget, target_node_id: edgeSource },
+        {
+          onSuccess: (savedEdge) => {
+            setEdges((eds) => [
+              ...eds.filter((e) => e.id !== edgeId),
+              { id: savedEdge.id, source: edgeTarget, target: edgeSource, type: 'process', data: { canEdit, waypoints: [] } },
+            ])
+          },
+        }
+      )
+    },
+    [processId, canEdit, setEdges]
+  )
+
   // Memoized context value — only recreates when actual values change
   const contextValue = useMemo(
     () => ({
@@ -264,6 +296,9 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       onDelete: handleDeleteNode,
       onUpdateTaggedProfiles: handleUpdateTaggedProfiles,
       onUpdateTaggedDepartments: handleUpdateTaggedDepartments,
+      onReverseEdge: handleReverseEdge,
+      onUpdateEdgeWaypoints: handleUpdateEdgeWaypoints,
+      processId,
     }),
     [
       canEdit,
@@ -274,6 +309,9 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       handleDeleteNode,
       handleUpdateTaggedProfiles,
       handleUpdateTaggedDepartments,
+      handleReverseEdge,
+      handleUpdateEdgeWaypoints,
+      processId,
     ]
   )
 
@@ -300,6 +338,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
             nodesConnectable={canEdit}
             elementsSelectable={true}
             deleteKeyCode={canEdit ? 'Backspace' : null}
+            connectionRadius={60}
             minZoom={0.1}
             maxZoom={2}
             defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}

@@ -17,7 +17,7 @@ import type { ProcessNodeType } from '../../types/processes'
 import { getNodeTypeConfig } from '../../types/processes'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
-import { getInitials } from '../../lib/utils'
+import { cn, getInitials } from '../../lib/utils'
 import { useProcessCanvasContext } from './ProcessCanvasContext'
 
 // Only node-specific fields live in data — shared state comes from context.
@@ -154,17 +154,53 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
 
   const stopPropagation = (e: React.MouseEvent | React.PointerEvent) => e.stopPropagation()
 
+  // Handles: visible only in edit mode, emerge on node hover, grow on direct hover
+  const handleCls = cn(
+    '!bg-primary !border-2 !border-white !rounded-full !shadow-sm transition-all duration-150',
+    isEditing
+      ? '!w-3 !h-3 !opacity-0 group-hover:!opacity-100 hover:!w-4 hover:!h-4 hover:!shadow-md'
+      : '!opacity-0 !pointer-events-none !w-2 !h-2',
+  )
+
   return (
     <div
       className="bg-white rounded-lg shadow-lg border-2 border-gray-200 hover:border-gray-400 transition-colors min-w-[200px] max-w-[240px] group"
       style={{ borderTopColor: config.color, borderTopWidth: 4 }}
     >
-      <Handle type="target" position={Position.Top}    id="top-target"    className="!bg-primary" />
-      <Handle type="source" position={Position.Top}    id="top-source"    className="!bg-primary" />
-      <Handle type="target" position={Position.Left}   id="left-target"   className="!bg-primary" />
-      <Handle type="source" position={Position.Left}   id="left-source"   className="!bg-primary" />
-      <Handle type="target" position={Position.Right}  id="right-target"  className="!bg-primary" />
-      <Handle type="source" position={Position.Right}  id="right-source"  className="!bg-primary" />
+      {/*
+        Full-node invisible target handle.
+        Covers the entire node face so users can drop a connection anywhere on the
+        node — not just on the small side handles. React Flow detects it via its
+        bounding box; our ProcessEdge getBestHandles() still picks the correct
+        visual routing independently of which handle was used.
+        pointer-events:none ensures it never blocks clicks on node content.
+      */}
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="node-body"
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          transform: 'none',
+          opacity: 0,
+          background: 'transparent',
+          border: 'none',
+          borderRadius: 'inherit',
+          pointerEvents: 'none',
+          zIndex: 0,
+        }}
+      />
+
+      <Handle type="target" position={Position.Top}    id="top-target"    className={cn(handleCls, 'top-handle-target')} />
+      <Handle type="source" position={Position.Top}    id="top-source"    className={cn(handleCls, 'top-handle-source')} />
+      <Handle type="target" position={Position.Left}   id="left-target"   className={cn(handleCls, 'left-handle-target')} />
+      <Handle type="source" position={Position.Left}   id="left-source"   className={cn(handleCls, 'left-handle-source')} />
+      <Handle type="target" position={Position.Right}  id="right-target"  className={cn(handleCls, 'right-handle-target')} />
+      <Handle type="source" position={Position.Right}  id="right-source"  className={cn(handleCls, 'right-handle-source')} />
 
       <div className="p-3">
         {/* Header */}
@@ -224,7 +260,7 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
           />
         ) : (
           <p
-            className={`mt-1 text-xs text-muted-foreground leading-tight ${isEditing ? 'cursor-text hover:bg-gray-50 rounded px-1 -mx-1 py-0.5 min-h-[16px]' : ''}`}
+            className={`mt-1 text-xs text-muted-foreground leading-tight min-h-[1rem] ${isEditing ? 'cursor-text hover:bg-gray-50 rounded px-1 -mx-1 py-0.5' : ''}`}
             onClick={() => { if (isEditing) { setEditingDesc(true); setTimeout(() => descRef.current?.focus(), 0) } }}
             title={isEditing ? 'Click to add description' : undefined}
           >
@@ -232,9 +268,15 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
           </p>
         )}
 
-        {/* Department badges */}
-        {(taggedDepartments.length > 0 || isEditing) && (
-          <div className="flex flex-wrap gap-1 mt-2">
+        {/* Department badges
+            Always rendered when the org has departments so node height stays
+            consistent between edit and view mode. In view mode with no tagged
+            departments the section is invisible but still occupies space. */}
+        {(taggedDepartments.length > 0 || allDepartments.length > 0) && (
+          <div className={cn(
+            'flex flex-wrap gap-1 mt-2 min-h-[24px]',
+            !isEditing && taggedDepartments.length === 0 && 'invisible',
+          )}>
             {taggedDepartments.map((dept) => (
               <Badge
                 key={dept.id}
@@ -291,10 +333,16 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
           </div>
         )}
 
-        {/* Tagged employees */}
-        {(taggedProfiles.length > 0 || isEditing) && (
-          <div className="mt-3 pt-2.5 border-t border-gray-100">
-            <div className="flex items-center flex-wrap gap-1">
+        {/* Tagged employees
+            Same rationale as the department section above: always rendered
+            when the org has profiles so the node stays the same height in
+            both edit and view mode. */}
+        {(taggedProfiles.length > 0 || allProfiles.length > 0) && (
+          <div className={cn(
+            'mt-3 pt-2.5 border-t border-gray-100',
+            !isEditing && taggedProfiles.length === 0 && 'invisible',
+          )}>
+            <div className="flex items-center flex-wrap gap-1 min-h-[24px]">
               {taggedProfiles.map((profile) => {
                 const displayName = profile.preferred_name || profile.full_name
                 return (
@@ -381,8 +429,8 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
         )}
       </div>
 
-      <Handle type="target" position={Position.Bottom} id="bottom-target" className="!bg-primary" />
-      <Handle type="source" position={Position.Bottom} id="bottom-source" className="!bg-primary" />
+      <Handle type="target" position={Position.Bottom} id="bottom-target" className={cn(handleCls, 'bottom-handle-target')} />
+      <Handle type="source" position={Position.Bottom} id="bottom-source" className={cn(handleCls, 'bottom-handle-source')} />
     </div>
   )
 })

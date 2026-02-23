@@ -10,6 +10,9 @@ export interface ProcessCanvasContextType {
   onDelete: (id: string) => void
   onUpdateTaggedProfiles: (nodeId: string, profileIds: string[]) => void
   onUpdateTaggedDepartments: (nodeId: string, departmentIds: string[]) => void
+  onReverseEdge: (edgeId: string, source: string, target: string) => void
+  onUpdateEdgeWaypoints: (edgeId: string, waypoints: { x: number; y: number }[]) => void
+  processId: string
 }
 
 export const ProcessCanvasContext = createContext<ProcessCanvasContextType | null>(null)

@@ -38,6 +38,7 @@ export interface ProcessEdge {
   source_node_id: string
   target_node_id: string
   label: string | null
+  waypoints: { x: number; y: number }[] | null
   created_at: string
 }
 
