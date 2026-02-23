@@ -117,11 +117,56 @@ function computeInitialCorners(src: Pt, tgt: Pt, srcPos: Position): Pt[] {
 
 /**
  * Derive corner array from saved waypoints or fall back to auto-route.
- * Waypoints ARE the interior corners of the orthogonal path.
+ *
+ * When waypoints exist they are stored as absolute coordinates, but the
+ * source/target nodes may have moved since the route was saved, which would
+ * produce diagonal segments.  We fix this at render time without touching the
+ * persisted data:
+ *
+ *  - Each waypoint has one "free" axis (the user's custom position) and one
+ *    "constrained" axis that must match the adjacent point to stay orthogonal.
+ *  - Forward pass: propagate constraints from source through the chain.
+ *    For a horizontal-exit source (Right/Left), even-indexed waypoints end a
+ *    horizontal segment (constrain y) and odd-indexed ones end a vertical
+ *    segment (constrain x).  The pattern reverses for vertical-exit sources.
+ *  - Backward fix: snap the last waypoint's *free* axis to the target so the
+ *    final segment is also orthogonal.
+ *
+ * Result: the user's chosen segment positions are preserved; segments simply
+ * stretch/shrink to accommodate node movement — no diagonals ever.
  */
 function computeCorners(src: Pt, waypoints: Pt[], tgt: Pt, srcPos: Position): Pt[] {
   if (waypoints.length === 0) return computeInitialCorners(src, tgt, srcPos)
-  return [src, ...waypoints, tgt]
+
+  const isHSrc = srcPos === Position.Right || srcPos === Position.Left
+  const n = waypoints.length
+  const adj = waypoints.map(wp => ({ ...wp }))
+
+  // Forward pass ─ constrain each waypoint relative to its predecessor
+  for (let i = 0; i < n; i++) {
+    const prev  = i === 0 ? src : adj[i - 1]
+    const isEven = i % 2 === 0
+    if (isHSrc) {
+      if (isEven) adj[i].y = prev.y   // H segment arrives here → match y
+      else        adj[i].x = prev.x   // V segment arrives here → match x
+    } else {
+      if (isEven) adj[i].x = prev.x   // V segment arrives here → match x
+      else        adj[i].y = prev.y   // H segment arrives here → match y
+    }
+  }
+
+  // Backward fix ─ align the last waypoint's free axis with the target so the
+  // final segment is also orthogonal
+  const lastIsEven = (n - 1) % 2 === 0
+  if (isHSrc) {
+    if (lastIsEven) adj[n - 1].x = tgt.x   // free axis is x, last seg is V
+    else            adj[n - 1].y = tgt.y   // free axis is y, last seg is H
+  } else {
+    if (lastIsEven) adj[n - 1].y = tgt.y   // free axis is y, last seg is H
+    else            adj[n - 1].x = tgt.x   // free axis is x, last seg is V
+  }
+
+  return [src, ...adj, tgt]
 }
 
 /** Compute one straight segment per consecutive corner pair. */
