@@ -3,6 +3,7 @@ import ReactFlow, {
   Background,
   Controls,
   MiniMap,
+  Panel,
   useNodesState,
   useEdgesState,
   addEdge,
@@ -10,6 +11,9 @@ import ReactFlow, {
   ReactFlowProvider,
 } from 'reactflow'
 import type { NodeTypes, EdgeTypes, Connection, Edge, Node, ReactFlowInstance } from 'reactflow'
+import { useQueryClient } from '@tanstack/react-query'
+import { supabase } from '../../lib/supabase'
+import { Undo2, Redo2 } from 'lucide-react'
 import 'reactflow/dist/style.css'
 import { ProcessNode } from './ProcessNode'
 import type { ProcessNodeData } from './ProcessNode'
@@ -104,6 +108,8 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   deleteEdgeRef.current = deleteEdge
   createNodeRef.current = createNode
 
+  const queryClient = useQueryClient()
+
   const [nodes, setNodes, onNodesChange] = useNodesState<ProcessNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const { fitView, screenToFlowPosition, getNode } = useReactFlow()
@@ -114,50 +120,178 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   // target side when the edge is dropped on the full-node 'node-body' handle.
   const lastPointerRef = useRef({ x: 0, y: 0 })
 
+  // ── Undo / Redo ─────────────────────────────────────────────────────────────
+  // Always-current mirrors used in callbacks to avoid stale closures
+  const nodesRef = useRef<Node<ProcessNodeData>[]>([])
+  const edgesRef = useRef<Edge[]>([])
+  nodesRef.current = nodes
+  edgesRef.current = edges
+
+  interface HistoryEntry { nodes: Node<ProcessNodeData>[]; edges: Edge[] }
+  const historyRef      = useRef<HistoryEntry[]>([])
+  const historyIndexRef = useRef(-1)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+
+  /** Push a snapshot onto the history stack (max 20 undoable steps). */
+  const pushToHistory = useCallback((newNodes: Node<ProcessNodeData>[], newEdges: Edge[]) => {
+    if (!canEdit) return
+    const truncated = historyRef.current.slice(0, historyIndexRef.current + 1)
+    truncated.push({
+      nodes: newNodes.map(n => ({ ...n, data: { ...n.data } })),
+      edges: newEdges.map(e => ({ ...e, data: { ...e.data } })),
+    })
+    if (truncated.length > 21) truncated.shift() // keep at most 20 past + current
+    else historyIndexRef.current++
+    historyRef.current = truncated
+    setCanUndo(historyIndexRef.current > 0)
+    setCanRedo(false)
+  }, [canEdit])
+
+  /**
+   * Reconcile the canvas state with the DB after an undo/redo step.
+   * Order matters due to FK constraints:
+   *   delete edges → delete nodes → upsert nodes → upsert edges
+   */
+  const reconcileToDb = useCallback(async (
+    target: HistoryEntry,
+    from: HistoryEntry,
+  ) => {
+    const targetNodeIds = new Set(target.nodes.map(n => n.id))
+    const targetEdgeIds = new Set(target.edges.map(e => e.id))
+
+    // 1. Delete edges not in target (FK: edges reference nodes)
+    const edgesToDel = from.edges.filter(e => !targetEdgeIds.has(e.id))
+    if (edgesToDel.length) {
+      await Promise.all(edgesToDel.map(e =>
+        (supabase as any).from('process_edges').delete().eq('id', e.id)
+      ))
+    }
+    // 2. Delete nodes not in target
+    const nodesToDel = from.nodes.filter(n => !targetNodeIds.has(n.id))
+    if (nodesToDel.length) {
+      await Promise.all(nodesToDel.map(n =>
+        (supabase as any).from('process_nodes').delete().eq('id', n.id)
+      ))
+    }
+    // 3. Upsert target nodes first (edges need them to exist)
+    if (target.nodes.length) {
+      await Promise.all(target.nodes.map(n =>
+        (supabase as any).from('process_nodes').upsert({
+          id: n.id, process_id: processId,
+          node_type: n.data.nodeType, label: n.data.label,
+          description: n.data.description || null,
+          x_position: n.position.x, y_position: n.position.y,
+          tagged_profile_ids: n.data.taggedProfileIds,
+          tagged_department_ids: n.data.taggedDepartmentIds,
+        })
+      ))
+    }
+    // 4. Upsert target edges
+    if (target.edges.length) {
+      await Promise.all(target.edges.map(e =>
+        (supabase as any).from('process_edges').upsert({
+          id: e.id, process_id: processId,
+          source_node_id: e.source, target_node_id: e.target,
+          label: e.label || null,
+          waypoints: e.data?.waypoints || null,
+          source_side: e.data?.srcSide || null,
+          target_side: e.data?.tgtSide || null,
+        })
+      ))
+    }
+    queryClient.invalidateQueries({ queryKey: ['process-nodes', processId] })
+    queryClient.invalidateQueries({ queryKey: ['process-edges', processId] })
+  }, [processId, queryClient])
+
+  const undo = useCallback(async () => {
+    if (!canEdit || historyIndexRef.current <= 0) return
+    const from = historyRef.current[historyIndexRef.current]
+    historyIndexRef.current--
+    const target = historyRef.current[historyIndexRef.current]
+    setNodes(target.nodes)
+    setEdges(target.edges)
+    setCanUndo(historyIndexRef.current > 0)
+    setCanRedo(true)
+    reconcileToDb(target, from)
+  }, [canEdit, setNodes, setEdges, reconcileToDb])
+
+  const redo = useCallback(async () => {
+    if (!canEdit || historyIndexRef.current >= historyRef.current.length - 1) return
+    const from = historyRef.current[historyIndexRef.current]
+    historyIndexRef.current++
+    const target = historyRef.current[historyIndexRef.current]
+    setNodes(target.nodes)
+    setEdges(target.edges)
+    setCanUndo(true)
+    setCanRedo(historyIndexRef.current < historyRef.current.length - 1)
+    reconcileToDb(target, from)
+  }, [canEdit, setNodes, setEdges, reconcileToDb])
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z = redo
+  useEffect(() => {
+    if (!canEdit) return
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey
+      if (!mod) return
+      if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
+      else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo() }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [canEdit, undo, redo])
+
   // Stable callbacks via mutation refs — safe in useCallback dep arrays
   const handleLabelChange = useCallback(
     (id: string, label: string) => {
       updateNodeRef.current.mutate({ id, process_id: processId, label })
-      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, label } } : n)))
+      const next = nodesRef.current.map((n) => n.id === id ? { ...n, data: { ...n.data, label } } : n)
+      setNodes(next)
+      pushToHistory(next, edgesRef.current)
     },
-    [processId, setNodes]
+    [processId, setNodes, pushToHistory]
   )
 
   const handleDescriptionChange = useCallback(
     (id: string, description: string) => {
       updateNodeRef.current.mutate({ id, process_id: processId, description })
-      setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: { ...n.data, description } } : n)))
+      const next = nodesRef.current.map((n) => n.id === id ? { ...n, data: { ...n.data, description } } : n)
+      setNodes(next)
+      pushToHistory(next, edgesRef.current)
     },
-    [processId, setNodes]
+    [processId, setNodes, pushToHistory]
   )
 
   const handleDeleteNode = useCallback(
     (id: string) => {
       deleteNodeRef.current.mutate({ id, process_id: processId })
-      setNodes((nds) => nds.filter((n) => n.id !== id))
-      setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id))
+      const nextNodes = nodesRef.current.filter((n) => n.id !== id)
+      const nextEdges = edgesRef.current.filter((e) => e.source !== id && e.target !== id)
+      setNodes(nextNodes)
+      setEdges(nextEdges)
+      pushToHistory(nextNodes, nextEdges)
     },
-    [processId, setNodes, setEdges]
+    [processId, setNodes, setEdges, pushToHistory]
   )
 
   const handleUpdateTaggedProfiles = useCallback(
     (nodeId: string, profileIds: string[]) => {
       updateNodeRef.current.mutate({ id: nodeId, process_id: processId, tagged_profile_ids: profileIds })
-      setNodes((nds) =>
-        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, taggedProfileIds: profileIds } } : n))
-      )
+      const next = nodesRef.current.map((n) => n.id === nodeId ? { ...n, data: { ...n.data, taggedProfileIds: profileIds } } : n)
+      setNodes(next)
+      pushToHistory(next, edgesRef.current)
     },
-    [processId, setNodes]
+    [processId, setNodes, pushToHistory]
   )
 
   const handleUpdateTaggedDepartments = useCallback(
     (nodeId: string, departmentIds: string[]) => {
       updateNodeRef.current.mutate({ id: nodeId, process_id: processId, tagged_department_ids: departmentIds })
-      setNodes((nds) =>
-        nds.map((n) => (n.id === nodeId ? { ...n, data: { ...n.data, taggedDepartmentIds: departmentIds } } : n))
-      )
+      const next = nodesRef.current.map((n) => n.id === nodeId ? { ...n, data: { ...n.data, taggedDepartmentIds: departmentIds } } : n)
+      setNodes(next)
+      pushToHistory(next, edgesRef.current)
     },
-    [processId, setNodes]
+    [processId, setNodes, pushToHistory]
   )
 
   // One-time initialization from the database — ref guard prevents re-runs
@@ -196,6 +330,12 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
     setNodes(rfNodes)
     setEdges(rfEdges)
 
+    // Seed history with the initial loaded state
+    historyRef.current = [{ nodes: rfNodes, edges: rfEdges }]
+    historyIndexRef.current = 0
+    setCanUndo(false)
+    setCanRedo(false)
+
     if (rfNodes.length > 0) {
       setTimeout(() => fitView({ padding: 0.2, duration: 600 }), 150)
     }
@@ -233,22 +373,17 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
         },
         {
           onSuccess: (savedEdge) => {
-            setEdges((eds) =>
-              addEdge(
-                {
-                  ...connection,
-                  id: savedEdge.id,
-                  type: 'process',
-                  data: { canEdit, waypoints: [], srcSide, tgtSide },
-                },
-                eds.filter((e) => !(e.source === connection.source && e.target === connection.target))
-              )
+            const nextEdges = addEdge(
+              { ...connection, id: savedEdge.id, type: 'process', data: { canEdit, waypoints: [], srcSide, tgtSide } },
+              edgesRef.current.filter((e) => !(e.source === connection.source && e.target === connection.target))
             )
+            setEdges(nextEdges)
+            pushToHistory(nodesRef.current, nextEdges)
           },
         }
       )
     },
-    [canEdit, processId, setEdges, screenToFlowPosition, getNode]
+    [canEdit, processId, setEdges, screenToFlowPosition, getNode, pushToHistory]
   )
 
   const onReconnect = useCallback(
@@ -264,18 +399,18 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
         ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null)
 
       // Update React Flow edge state (source/target may have changed)
-      setEdges((eds) =>
-        eds.map((e) =>
-          e.id !== oldEdge.id ? e : {
-            ...e,
-            source: newConnection.source!,
-            target: newConnection.target!,
-            sourceHandle: newConnection.sourceHandle,
-            targetHandle: newConnection.targetHandle,
-            data: { ...e.data, srcSide, tgtSide, waypoints: [] },
-          }
-        )
+      const nextEdges = edgesRef.current.map((e) =>
+        e.id !== oldEdge.id ? e : {
+          ...e,
+          source: newConnection.source!,
+          target: newConnection.target!,
+          sourceHandle: newConnection.sourceHandle,
+          targetHandle: newConnection.targetHandle,
+          data: { ...e.data, srcSide, tgtSide, waypoints: [] },
+        }
       )
+      setEdges(nextEdges)
+      pushToHistory(nodesRef.current, nextEdges)
 
       // Persist all changed fields (source/target nodes + sides + cleared waypoints)
       updateEdgeRef.current.mutate({
@@ -288,14 +423,17 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
         waypoints: [],
       })
     },
-    [canEdit, processId, setEdges, screenToFlowPosition, getNode]
+    [canEdit, processId, setEdges, screenToFlowPosition, getNode, pushToHistory]
   )
 
   const onEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
       deletedEdges.forEach((e) => deleteEdgeRef.current.mutate({ id: e.id, process_id: processId }))
+      const deletedIds = new Set(deletedEdges.map(e => e.id))
+      const nextEdges = edgesRef.current.filter(e => !deletedIds.has(e.id))
+      pushToHistory(nodesRef.current, nextEdges)
     },
-    [processId]
+    [processId, pushToHistory]
   )
 
   const handleNodeDragStop = useCallback(
@@ -307,9 +445,11 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
           x_position: node.position.x,
           y_position: node.position.y,
         })
+        // nodesRef.current already reflects the final drag position
+        pushToHistory(nodesRef.current, edgesRef.current)
       }
     },
-    [canEdit, processId]
+    [canEdit, processId, pushToHistory]
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -349,12 +489,14 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
                 taggedDepartmentIds: [],
               },
             }
-            setNodes((nds) => [...nds, newNode])
+            const nextNodes = [...nodesRef.current, newNode]
+            setNodes(nextNodes)
+            pushToHistory(nextNodes, edgesRef.current)
           },
         }
       )
     },
-    [canEdit, processId, rfInstance, screenToFlowPosition, setNodes]
+    [canEdit, processId, rfInstance, screenToFlowPosition, setNodes, pushToHistory]
   )
 
   const handleDragStart = useCallback((event: React.DragEvent, nodeType: ProcessNodeType) => {
@@ -364,12 +506,12 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
 
   const handleUpdateEdgeWaypoints = useCallback(
     (edgeId: string, waypoints: { x: number; y: number }[]) => {
-      setEdges((eds) =>
-        eds.map((e) => (e.id === edgeId ? { ...e, data: { ...e.data, waypoints } } : e))
-      )
+      const nextEdges = edgesRef.current.map((e) => e.id === edgeId ? { ...e, data: { ...e.data, waypoints } } : e)
+      setEdges(nextEdges)
       updateEdgeRef.current.mutate({ id: edgeId, process_id: processId, waypoints })
+      pushToHistory(nodesRef.current, nextEdges)
     },
-    [processId, setEdges]
+    [processId, setEdges, pushToHistory]
   )
 
   const handleReverseEdge = useCallback(
@@ -379,15 +521,17 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
         { process_id: processId, source_node_id: edgeTarget, target_node_id: edgeSource },
         {
           onSuccess: (savedEdge) => {
-            setEdges((eds) => [
-              ...eds.filter((e) => e.id !== edgeId),
+            const nextEdges = [
+              ...edgesRef.current.filter((e) => e.id !== edgeId),
               { id: savedEdge.id, source: edgeTarget, target: edgeSource, type: 'process', data: { canEdit, waypoints: [] } },
-            ])
+            ]
+            setEdges(nextEdges)
+            pushToHistory(nodesRef.current, nextEdges)
           },
         }
       )
     },
-    [processId, canEdit, setEdges]
+    [processId, canEdit, setEdges, pushToHistory]
   )
 
   // Memoized context value — only recreates when actual values change
@@ -458,6 +602,28 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
             <Background gap={20} size={1} color="#e5e7eb" />
             <Controls />
             <MiniMap nodeColor={() => '#94a3b8'} maskColor="rgba(0,0,0,0.06)" />
+            {canEdit && (
+              <Panel position="top-right">
+                <div className="flex items-center gap-0.5 bg-white rounded-lg border border-gray-200 shadow-sm p-1">
+                  <button
+                    onClick={undo}
+                    disabled={!canUndo}
+                    className="p-1.5 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Undo (Ctrl+Z)"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={redo}
+                    disabled={!canRedo}
+                    className="p-1.5 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="Redo (Ctrl+Y)"
+                  >
+                    <Redo2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </Panel>
+            )}
           </ReactFlow>
         </div>
       </div>
