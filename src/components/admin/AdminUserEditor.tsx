@@ -6,7 +6,7 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { JobDescriptionEditor } from '../ui/JobDescriptionEditor'
-import { Loader2, Shield, Users, Info, BarChart2 } from 'lucide-react'
+import { Loader2, Shield, Users, Info, BarChart2, GitFork } from 'lucide-react'
 import { PhotoUpload } from '../profile/PhotoUpload'
 
 interface AdminUserEditorProps {
@@ -30,6 +30,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
     is_admin: profile.is_admin,
     is_manager: profile.is_manager || false,
     is_executive: profile.is_executive || false,
+    is_process_editor: profile.is_process_editor || false,
   })
 
   // Reset form when profile changes
@@ -42,6 +43,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
       is_admin: profile.is_admin,
       is_manager: profile.is_manager || false,
       is_executive: profile.is_executive || false,
+      is_process_editor: profile.is_process_editor || false,
     })
     setCurrentPhotoUrl(profile.profile_photo_url)
     setDepartmentAutoFilled(false)
@@ -80,6 +82,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
       is_admin: formData.is_admin,
       is_manager: formData.is_manager,
       is_executive: formData.is_executive,
+      is_process_editor: formData.is_process_editor,
     } as any)
 
     onSaved?.()
@@ -215,6 +218,19 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
           <Label htmlFor="is_executive" className="flex items-center gap-2">
             <BarChart2 className="h-4 w-4" />
             Executive (KPI Dashboard access)
+          </Label>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            id="is_process_editor"
+            checked={formData.is_process_editor}
+            onChange={(e) => setFormData(prev => ({ ...prev, is_process_editor: e.target.checked }))}
+            className="h-4 w-4 rounded border-gray-300"
+          />
+          <Label htmlFor="is_process_editor" className="flex items-center gap-2">
+            <GitFork className="h-4 w-4" />
+            Process Editor (create &amp; edit any process)
           </Label>
         </div>
       </div>

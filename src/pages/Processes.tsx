@@ -14,7 +14,7 @@ import { Loader2 } from 'lucide-react'
 export default function Processes() {
   usePageTitle('Processes')
   const { user } = useAuth()
-  const { isAdmin, isManager, isLoading } = usePermissions()
+  const { isAdmin, isManager, isProcessEditor, isLoading } = usePermissions()
   const [selectedProcess, setSelectedProcess] = useState<Process | null>(null)
   const [editMode, setEditMode] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
@@ -27,9 +27,9 @@ export default function Processes() {
     )
   }
 
-  const canCreate = isAdmin || isManager
+  const canCreate = isAdmin || isManager || isProcessEditor
   const canEdit = (process: Process) =>
-    isAdmin || (isManager && process.created_by === user?.id)
+    isAdmin || isProcessEditor || (isManager && process.created_by === user?.id)
 
   // Canvas view
   if (selectedProcess) {
@@ -119,6 +119,7 @@ export default function Processes() {
       canCreate={canCreate}
       currentUserId={user?.id ?? ''}
       isAdmin={isAdmin}
+      isProcessEditor={isProcessEditor}
       onSelect={(process) => {
         setSelectedProcess(process)
         setEditMode(false)

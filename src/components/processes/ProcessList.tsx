@@ -18,10 +18,11 @@ interface ProcessListProps {
   canCreate: boolean
   currentUserId: string
   isAdmin: boolean
+  isProcessEditor?: boolean
   onSelect: (process: Process) => void
 }
 
-export function ProcessList({ canCreate, currentUserId, isAdmin, onSelect }: ProcessListProps) {
+export function ProcessList({ canCreate, currentUserId, isAdmin, isProcessEditor = false, onSelect }: ProcessListProps) {
   const { data: processes = [], isLoading } = useProcesses()
   const createProcess = useCreateProcess()
   const updateProcess = useUpdateProcess()
@@ -33,7 +34,7 @@ export function ProcessList({ canCreate, currentUserId, isAdmin, onSelect }: Pro
   const [deleteTarget, setDeleteTarget] = useState<Process | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  const canManage = (process: Process) => isAdmin || process.created_by === currentUserId
+  const canManage = (process: Process) => isAdmin || isProcessEditor || process.created_by === currentUserId
 
   const handleCreate = async (name: string, description: string) => {
     await createProcess.mutateAsync({ name, description: description || undefined })

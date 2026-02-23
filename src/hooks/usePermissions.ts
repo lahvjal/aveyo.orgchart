@@ -42,12 +42,14 @@ export function usePermissions() {
 
   const isSuperAdmin = profile?.is_super_admin || false
   const isAdmin = profile?.is_admin || isSuperAdmin
+  const isProcessEditor = profile?.is_process_editor || false
 
   return {
     isAdmin,
     isManager: profile?.is_manager || false,
     isExecutive: profile?.is_executive || false,
     isSuperAdmin,
+    isProcessEditor,
     canEditProfile: (profileId: string) => {
       return isAdmin || profile?.id === profileId
     },
