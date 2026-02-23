@@ -1,5 +1,5 @@
 import { memo, useState, useRef, useCallback, useEffect } from 'react'
-import { Handle, Position } from 'reactflow'
+import { Handle, Position, useStore } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import {
   PlayCircle,
@@ -53,6 +53,10 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
     onUpdateTaggedProfiles,
     onUpdateTaggedDepartments,
   } = useProcessCanvasContext()
+
+  // True while the user is dragging a new connection from any node.
+  // Used to make handles fully visible so valid drop targets are obvious.
+  const isConnecting = useStore((s) => !!s.connectionNodeId)
 
   const config = getNodeTypeConfig(nodeType)
   const Icon = NODE_ICONS[nodeType]
@@ -154,11 +158,21 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
 
   const stopPropagation = (e: React.MouseEvent | React.PointerEvent) => e.stopPropagation()
 
-  // Handles: visible only in edit mode, emerge on node hover, grow on direct hover
+  // Handles: visible only in edit mode.
+  //
+  // On plain node-hover they appear at low opacity with pointer-events:none so
+  // they don't block access to edge endpoints/reconnect handles that sit at the
+  // same position. They become fully interactive only when the cursor moves
+  // directly over the handle itself, or when the user is mid-drag on a new
+  // connection (showing valid drop targets across all nodes).
   const handleCls = cn(
     '!bg-primary !border-2 !border-white !rounded-full !shadow-sm transition-all duration-150',
     isEditing
-      ? '!w-3 !h-3 !opacity-0 group-hover:!opacity-100 hover:!w-4 hover:!h-4 hover:!shadow-md'
+      ? isConnecting
+        // Actively drawing a connection → show all handles as valid targets
+        ? '!w-3 !h-3 !opacity-100 !pointer-events-auto'
+        // Idle → ghost on node-hover (non-blocking), full on direct hover
+        : '!w-3 !h-3 !opacity-0 group-hover:!opacity-30 group-hover:!pointer-events-none hover:!opacity-100 hover:!pointer-events-auto hover:!w-4 hover:!h-4 hover:!shadow-md'
       : '!opacity-0 !pointer-events-none !w-2 !h-2',
   )
 
