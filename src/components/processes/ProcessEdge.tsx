@@ -259,21 +259,10 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
   const allEdges      = useStore((s) => s.edges)
   const nodeInternals = useStore((s) => s.nodeInternals)
   const { deleteElements, screenToFlowPosition } = useReactFlow()
-  const { isEditing, onReverseEdge, onUpdateEdgeWaypoints, onUpdateEdgeSides } = useProcessCanvasContext()
+  const { isEditing, onReverseEdge, onUpdateEdgeWaypoints } = useProcessCanvasContext()
 
   const [controlsHovered, setControlsHovered] = useState(false)
   const [hoveredSegIdx, setHoveredSegIdx] = useState<number | null>(null)
-
-  // Which connection dot is currently hovered ('src' | 'tgt' | null)
-  const [hoveredDot, setHoveredDot] = useState<'src' | 'tgt' | null>(null)
-  const dotHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const scheduleDotHide = () => {
-    dotHideTimer.current = setTimeout(() => setHoveredDot(null), 160)
-  }
-  const cancelDotHide = () => {
-    if (dotHideTimer.current) clearTimeout(dotHideTimer.current)
-  }
 
   // During drag: local corners for instant feedback; null = not dragging
   const [dragCorners, setDragCorners] = useState<Pt[] | null>(null)
@@ -408,21 +397,7 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
         style={{ stroke: edgeColor, strokeWidth: selected ? 2.5 : 2 }}
       />
 
-      {/* Connection dots — interactive in edit mode to open the side picker */}
-      {isEditing && (
-        <>
-          <circle cx={srcCoords.x} cy={srcCoords.y} r={9} fill="transparent"
-            style={{ pointerEvents: 'all', cursor: 'pointer' }}
-            onMouseEnter={() => { cancelDotHide(); setHoveredDot('src') }}
-            onMouseLeave={scheduleDotHide}
-          />
-          <circle cx={tgtCoords.x} cy={tgtCoords.y} r={9} fill="transparent"
-            style={{ pointerEvents: 'all', cursor: 'pointer' }}
-            onMouseEnter={() => { cancelDotHide(); setHoveredDot('tgt') }}
-            onMouseLeave={scheduleDotHide}
-          />
-        </>
-      )}
+      {/* Connection dots — visual markers at each endpoint, always non-interactive */}
       <circle cx={srcCoords.x} cy={srcCoords.y} r={4} fill={edgeColor} stroke="white" strokeWidth={2} style={{ pointerEvents: 'none' }} />
       <circle cx={tgtCoords.x} cy={tgtCoords.y} r={4} fill={edgeColor} stroke="white" strokeWidth={2} style={{ pointerEvents: 'none' }} />
 
@@ -519,83 +494,6 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
             )}
           </div>
         </div>
-
-        {/* Side pickers — appear when hovering a connection dot */}
-        {isEditing && hoveredDot !== null && (() => {
-          const isSrc   = hoveredDot === 'src'
-          const dotX    = isSrc ? srcCoords.x : tgtCoords.x
-          const dotY    = isSrc ? srcCoords.y : tgtCoords.y
-          const active  = isSrc ? srcPos : tgtPos
-
-          const choose = (p: Position) => {
-            const newSrc = isSrc ? p : srcPos
-            const newTgt = isSrc ? tgtPos : p
-            // Position enum values are already the string we store ('top','right','bottom','left')
-            onUpdateEdgeSides(id, newSrc as string, newTgt as string)
-            setHoveredDot(null)
-          }
-
-          const Btn = ({ side, label }: { side: Position; label: string }) => (
-            <button
-              onClick={(e) => { e.stopPropagation(); choose(side) }}
-              style={{
-                width: 20, height: 20,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                borderRadius: '50%',
-                background: side === active ? '#6366f1' : '#f1f5f9',
-                color:      side === active ? 'white'   : '#64748b',
-                border:     `1px solid ${side === active ? '#6366f1' : '#e2e8f0'}`,
-                fontSize: 11, fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'background 0.1s',
-              }}
-            >
-              {label}
-            </button>
-          )
-
-          return (
-            <div
-              className="nodrag nopan"
-              style={{
-                position: 'absolute',
-                transform: `translate(-50%, -50%) translate(${dotX}px, ${dotY}px)`,
-                pointerEvents: 'all',
-                zIndex: 1000,
-              }}
-              onMouseEnter={cancelDotHide}
-              onMouseLeave={scheduleDotHide}
-            >
-              {/* 3×3 compass grid */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: '20px 20px 20px',
-                gridTemplateRows: '20px 20px 20px',
-                gap: 2,
-                padding: 4,
-                background: 'white',
-                borderRadius: 8,
-                boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
-                border: '1px solid #e2e8f0',
-              }}>
-                {/* Row 1 */}
-                <div />
-                <Btn side={Position.Top}    label="↑" />
-                <div />
-                {/* Row 2 */}
-                <Btn side={Position.Left}   label="←" />
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#cbd5e1' }} />
-                </div>
-                <Btn side={Position.Right}  label="→" />
-                {/* Row 3 */}
-                <div />
-                <Btn side={Position.Bottom} label="↓" />
-                <div />
-              </div>
-            </div>
-          )
-        })()}
 
       </EdgeLabelRenderer>
     </>

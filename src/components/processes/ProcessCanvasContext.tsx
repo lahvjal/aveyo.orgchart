@@ -12,7 +12,6 @@ export interface ProcessCanvasContextType {
   onUpdateTaggedDepartments: (nodeId: string, departmentIds: string[]) => void
   onReverseEdge: (edgeId: string, source: string, target: string) => void
   onUpdateEdgeWaypoints: (edgeId: string, waypoints: { x: number; y: number }[]) => void
-  onUpdateEdgeSides: (edgeId: string, srcSide: string | null, tgtSide: string | null) => void
   processId: string
 }
 

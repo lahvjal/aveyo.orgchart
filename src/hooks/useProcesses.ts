@@ -224,6 +224,8 @@ export function useCreateProcessEdge() {
       source_node_id: string
       target_node_id: string
       label?: string
+      source_side?: string | null
+      target_side?: string | null
     }) => {
       const { data, error } = await (supabase as any)
         .from('process_edges')
@@ -250,17 +252,23 @@ export function useUpdateProcessEdge() {
       waypoints,
       source_side,
       target_side,
+      source_node_id,
+      target_node_id,
     }: {
       id: string
       process_id: string
       waypoints?: { x: number; y: number }[]
       source_side?: string | null
       target_side?: string | null
+      source_node_id?: string
+      target_node_id?: string
     }) => {
       const patch: Record<string, unknown> = {}
-      if (waypoints !== undefined)   patch.waypoints    = waypoints
-      if (source_side !== undefined) patch.source_side = source_side
-      if (target_side !== undefined) patch.target_side = target_side
+      if (waypoints !== undefined)      patch.waypoints      = waypoints
+      if (source_side !== undefined)    patch.source_side    = source_side
+      if (target_side !== undefined)    patch.target_side    = target_side
+      if (source_node_id !== undefined) patch.source_node_id = source_node_id
+      if (target_node_id !== undefined) patch.target_node_id = target_node_id
 
       const { data, error } = await (supabase as any)
         .from('process_edges')

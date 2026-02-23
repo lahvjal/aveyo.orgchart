@@ -34,6 +34,40 @@ import { useDepartments } from '../../lib/queries'
 const nodeTypes: NodeTypes = { process: ProcessNode }
 const edgeTypes: EdgeTypes = { process: ProcessEdge }
 
+// ── Side-detection helpers (module-level, no closures needed) ────────────────
+
+/**
+ * Derive a side string from a handle ID.
+ * Handle IDs follow the pattern '<side>-source' / '<side>-target'.
+ * Returns null for 'node-body' and any other full-node handles.
+ */
+function sideFromHandleId(handleId: string | null | undefined): string | null {
+  if (!handleId) return null
+  if (handleId.startsWith('top'))    return 'top'
+  if (handleId.startsWith('bottom')) return 'bottom'
+  if (handleId.startsWith('left'))   return 'left'
+  if (handleId.startsWith('right'))  return 'right'
+  return null
+}
+
+/**
+ * Compute which side of a node a flow-space point is closest to.
+ * Normalises dx/dy by the node's half-dimensions so the result is
+ * correct for rectangular (non-square) nodes.
+ */
+function sideFromPoint(
+  node: { position: { x: number; y: number }; positionAbsolute?: { x: number; y: number }; width?: number | null; height?: number | null },
+  flowPt: { x: number; y: number },
+): string {
+  const pos = node.positionAbsolute ?? node.position
+  const hw = (node.width  ?? 200) / 2
+  const hh = (node.height ?? 100) / 2
+  const dx = flowPt.x - (pos.x + hw)
+  const dy = flowPt.y - (pos.y + hh)
+  if (Math.abs(dx / hw) >= Math.abs(dy / hh)) return dx >= 0 ? 'right' : 'left'
+  return dy >= 0 ? 'bottom' : 'top'
+}
+
 interface ProcessCanvasProps {
   processId: string
   canEdit: boolean
@@ -72,10 +106,13 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ProcessNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
-  const { fitView, screenToFlowPosition } = useReactFlow()
+  const { fitView, screenToFlowPosition, getNode } = useReactFlow()
   const hasInitialized = useRef(false)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
+  // Track last pointer position so onConnect / onReconnect can compute the
+  // target side when the edge is dropped on the full-node 'node-body' handle.
+  const lastPointerRef = useRef({ x: 0, y: 0 })
 
   // Stable callbacks via mutation refs — safe in useCallback dep arrays
   const handleLabelChange = useCallback(
@@ -174,13 +211,36 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   const onConnect = useCallback(
     (connection: Connection) => {
       if (!canEdit || !connection.source || !connection.target) return
+
+      // Resolve which side of each node the edge exits/enters.
+      // Named handles (e.g. 'right-source') give us the side directly.
+      // The full-node 'node-body' handle falls back to cursor-position heuristic.
+      const flowPt = screenToFlowPosition(lastPointerRef.current)
+      const srcNode = getNode(connection.source)
+      const tgtNode = getNode(connection.target)
+      const srcSide = sideFromHandleId(connection.sourceHandle)
+        ?? (srcNode ? sideFromPoint(srcNode, flowPt) : null)
+      const tgtSide = sideFromHandleId(connection.targetHandle)
+        ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null)
+
       createEdgeRef.current.mutate(
-        { process_id: processId, source_node_id: connection.source, target_node_id: connection.target },
+        {
+          process_id: processId,
+          source_node_id: connection.source,
+          target_node_id: connection.target,
+          source_side: srcSide,
+          target_side: tgtSide,
+        },
         {
           onSuccess: (savedEdge) => {
             setEdges((eds) =>
               addEdge(
-                { ...connection, id: savedEdge.id, type: 'process', data: { canEdit } },
+                {
+                  ...connection,
+                  id: savedEdge.id,
+                  type: 'process',
+                  data: { canEdit, waypoints: [], srcSide, tgtSide },
+                },
                 eds.filter((e) => !(e.source === connection.source && e.target === connection.target))
               )
             )
@@ -188,7 +248,47 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
         }
       )
     },
-    [canEdit, processId, setEdges]
+    [canEdit, processId, setEdges, screenToFlowPosition, getNode]
+  )
+
+  const onReconnect = useCallback(
+    (oldEdge: Edge, newConnection: Connection) => {
+      if (!canEdit || !newConnection.source || !newConnection.target) return
+
+      const flowPt  = screenToFlowPosition(lastPointerRef.current)
+      const srcNode = getNode(newConnection.source)
+      const tgtNode = getNode(newConnection.target)
+      const srcSide = sideFromHandleId(newConnection.sourceHandle)
+        ?? (srcNode ? sideFromPoint(srcNode, flowPt) : null)
+      const tgtSide = sideFromHandleId(newConnection.targetHandle)
+        ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null)
+
+      // Update React Flow edge state (source/target may have changed)
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id !== oldEdge.id ? e : {
+            ...e,
+            source: newConnection.source!,
+            target: newConnection.target!,
+            sourceHandle: newConnection.sourceHandle,
+            targetHandle: newConnection.targetHandle,
+            data: { ...e.data, srcSide, tgtSide, waypoints: [] },
+          }
+        )
+      )
+
+      // Persist all changed fields (source/target nodes + sides + cleared waypoints)
+      updateEdgeRef.current.mutate({
+        id: oldEdge.id,
+        process_id: processId,
+        source_node_id: newConnection.source!,
+        target_node_id: newConnection.target!,
+        source_side: srcSide,
+        target_side: tgtSide,
+        waypoints: [],
+      })
+    },
+    [canEdit, processId, setEdges, screenToFlowPosition, getNode]
   )
 
   const onEdgesDelete = useCallback(
@@ -272,27 +372,6 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
     [processId, setEdges]
   )
 
-  const handleUpdateEdgeSides = useCallback(
-    (edgeId: string, srcSide: string | null, tgtSide: string | null) => {
-      // Reset waypoints so the path rerouts from the new side cleanly
-      setEdges((eds) =>
-        eds.map((e) =>
-          e.id === edgeId
-            ? { ...e, data: { ...e.data, srcSide, tgtSide, waypoints: [] } }
-            : e
-        )
-      )
-      updateEdgeRef.current.mutate({
-        id: edgeId,
-        process_id: processId,
-        source_side: srcSide,
-        target_side: tgtSide,
-        waypoints: [],
-      })
-    },
-    [processId, setEdges]
-  )
-
   const handleReverseEdge = useCallback(
     (edgeId: string, edgeSource: string, edgeTarget: string) => {
       deleteEdgeRef.current.mutate({ id: edgeId, process_id: processId })
@@ -324,7 +403,6 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       onUpdateTaggedDepartments: handleUpdateTaggedDepartments,
       onReverseEdge: handleReverseEdge,
       onUpdateEdgeWaypoints: handleUpdateEdgeWaypoints,
-      onUpdateEdgeSides: handleUpdateEdgeSides,
       processId,
     }),
     [
@@ -338,7 +416,6 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       handleUpdateTaggedDepartments,
       handleReverseEdge,
       handleUpdateEdgeWaypoints,
-      handleUpdateEdgeSides,
       processId,
     ]
   )
@@ -348,13 +425,18 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       <div className="flex w-full h-full">
         {canEdit && <ProcessNodePalette onDragStart={handleDragStart} />}
 
-        <div ref={reactFlowWrapper} className="flex-1 h-full">
+        <div
+          ref={reactFlowWrapper}
+          className="flex-1 h-full"
+          onPointerMove={(e) => { lastPointerRef.current = { x: e.clientX, y: e.clientY } }}
+        >
           <ReactFlow
             nodes={nodes}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onReconnect={canEdit ? onReconnect : undefined}
             onEdgesDelete={onEdgesDelete}
             onNodeDragStop={handleNodeDragStop}
             onDragOver={onDragOver}
@@ -367,6 +449,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
             elementsSelectable={true}
             deleteKeyCode={canEdit ? 'Backspace' : null}
             connectionRadius={60}
+            reconnectRadius={20}
             minZoom={0.1}
             maxZoom={2}
             defaultViewport={{ x: 0, y: 0, zoom: 0.9 }}
