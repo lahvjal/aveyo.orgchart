@@ -148,7 +148,12 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       target: e.target_node_id,
       label: e.label ?? undefined,
       type: 'process',
-      data: { canEdit, waypoints: e.waypoints ?? [] },
+      data: {
+        canEdit,
+        waypoints: e.waypoints ?? [],
+        srcSide: e.source_side ?? null,
+        tgtSide: e.target_side ?? null,
+      },
     }))
 
     setNodes(rfNodes)
@@ -267,6 +272,27 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
     [processId, setEdges]
   )
 
+  const handleUpdateEdgeSides = useCallback(
+    (edgeId: string, srcSide: string | null, tgtSide: string | null) => {
+      // Reset waypoints so the path rerouts from the new side cleanly
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edgeId
+            ? { ...e, data: { ...e.data, srcSide, tgtSide, waypoints: [] } }
+            : e
+        )
+      )
+      updateEdgeRef.current.mutate({
+        id: edgeId,
+        process_id: processId,
+        source_side: srcSide,
+        target_side: tgtSide,
+        waypoints: [],
+      })
+    },
+    [processId, setEdges]
+  )
+
   const handleReverseEdge = useCallback(
     (edgeId: string, edgeSource: string, edgeTarget: string) => {
       deleteEdgeRef.current.mutate({ id: edgeId, process_id: processId })
@@ -298,6 +324,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       onUpdateTaggedDepartments: handleUpdateTaggedDepartments,
       onReverseEdge: handleReverseEdge,
       onUpdateEdgeWaypoints: handleUpdateEdgeWaypoints,
+      onUpdateEdgeSides: handleUpdateEdgeSides,
       processId,
     }),
     [
@@ -311,6 +338,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       handleUpdateTaggedDepartments,
       handleReverseEdge,
       handleUpdateEdgeWaypoints,
+      handleUpdateEdgeSides,
       processId,
     ]
   )

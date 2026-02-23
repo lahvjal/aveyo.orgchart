@@ -248,14 +248,23 @@ export function useUpdateProcessEdge() {
       id,
       process_id: _process_id,
       waypoints,
+      source_side,
+      target_side,
     }: {
       id: string
       process_id: string
-      waypoints: { x: number; y: number }[]
+      waypoints?: { x: number; y: number }[]
+      source_side?: string | null
+      target_side?: string | null
     }) => {
+      const patch: Record<string, unknown> = {}
+      if (waypoints !== undefined)   patch.waypoints    = waypoints
+      if (source_side !== undefined) patch.source_side = source_side
+      if (target_side !== undefined) patch.target_side = target_side
+
       const { data, error } = await (supabase as any)
         .from('process_edges')
-        .update({ waypoints })
+        .update(patch)
         .eq('id', id)
         .select()
         .single()
