@@ -135,8 +135,14 @@ export function useUserAuthStatus() {
 }
 
 /**
- * Helper to check if a user has ever logged in
+ * Helper to check if a user has ever logged in.
+ * Returns true when the user has a recorded sign-in date.
+ * Returns false only when the user is explicitly in the map with a null date.
+ * Returns true (benefit of the doubt) when the userId is absent from the map,
+ * which can happen if the auth-status fetch failed or returned partial data —
+ * better to hide a pending badge than to falsely show one.
  */
 export function hasUserLoggedIn(userId: string, authStatusMap: Record<string, string | null>): boolean {
+  if (!(userId in authStatusMap)) return true
   return !!authStatusMap[userId]
 }

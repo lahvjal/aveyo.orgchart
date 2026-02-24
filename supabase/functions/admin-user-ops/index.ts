@@ -135,20 +135,30 @@ serve(async (req) => {
         return jsonResponse({ error: 'Admin or manager access required' }, 403)
       }
 
-      const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers()
+      // Paginate through all users — the default page size is 50, so without
+      // pagination any user beyond the first page would be missing from the
+      // auth-status map and incorrectly shown as "Pending" in the UI.
+      const allUsers: Array<{ id: string; last_sign_in_at: string | null }> = []
+      let page = 1
+      const perPage = 1000
 
-      if (error) {
-        console.error('admin-user-ops listUsers error:', error)
-        return jsonResponse({ error: error.message }, 500)
+      while (true) {
+        const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage, page })
+
+        if (error) {
+          console.error('admin-user-ops listUsers error:', error)
+          return jsonResponse({ error: error.message }, 500)
+        }
+
+        for (const u of data.users) {
+          allUsers.push({ id: u.id, last_sign_in_at: u.last_sign_in_at ?? null })
+        }
+
+        if (!data.nextPage) break
+        page = data.nextPage
       }
 
-      // Only return the fields needed by the client (id + last_sign_in_at)
-      const userList = users.map((u) => ({
-        id: u.id,
-        last_sign_in_at: u.last_sign_in_at ?? null,
-      }))
-
-      return jsonResponse({ success: true, users: userList })
+      return jsonResponse({ success: true, users: allUsers })
     }
 
     // ── updateProfile ─────────────────────────────────────────────────────────
