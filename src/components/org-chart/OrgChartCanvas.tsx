@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -12,7 +12,7 @@ import ReactFlow, {
 import type { NodeTypes, Connection } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { EmployeeNode } from './EmployeeNode'
-import type { Profile, Department } from '../../types'
+import type { Profile, Department, OrgChartPosition } from '../../types'
 import { useOrgChart } from '../../hooks/useOrgChart'
 import { useUpdatePosition, getDepartmentDescendantIds } from '../../lib/queries'
 
@@ -26,6 +26,7 @@ interface OrgChartCanvasProps {
   searchQuery?: string
   selectedDepartment?: string | null
   allDepartments?: Department[]
+  savedPositions?: OrgChartPosition[]
 }
 
 const nodeTypes: NodeTypes = {
@@ -42,6 +43,7 @@ function OrgChartCanvasInner({
   searchQuery = '',
   selectedDepartment,
   allDepartments,
+  savedPositions,
 }: OrgChartCanvasProps) {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
 
@@ -50,20 +52,11 @@ function OrgChartCanvasInner({
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
-  const focusedProfileIds = useMemo(() => {
-    if (!selectedDepartment || !allDepartments) return null
-    const matchingIds = new Set(getDepartmentDescendantIds(selectedDepartment, allDepartments))
-    const ids = profiles
-      .filter((p) => p.department_id && matchingIds.has(p.department_id))
-      .map((p) => p.id)
-    return ids.length > 0 && ids.length < profiles.length ? new Set(ids) : null
-  }, [selectedDepartment, allDepartments, profiles])
-
   const { nodes: initialNodes, edges: initialEdges } = useOrgChart(
     profiles,
     isAdmin,
     currentUserId,
-    focusedProfileIds,
+    savedPositions
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
@@ -75,10 +68,26 @@ function OrgChartCanvasInner({
   const nodesRef = useRef(nodes)
   useEffect(() => { nodesRef.current = nodes }, [nodes])
 
+  // Store fixed Y positions for each node to enforce horizontal-only dragging
+  const nodeYPositions = useRef<Record<string, number>>({})
+  
+  // Track node positions before drag starts (for swapping)
+  const dragStartPositions = useRef<Record<string, { x: number; y: number }>>({})
+
+  // Constants for grid snapping
+  const SLOT_WIDTH = 280 // 220px node width + 60px gap (matches dagre nodesep)
+
   // Update nodes when profiles change
   useEffect(() => {
     setNodes(initialNodes)
     setEdges(initialEdges)
+    
+    // Update Y position map when nodes change
+    const yPositions: Record<string, number> = {}
+    initialNodes.forEach((node) => {
+      yPositions[node.id] = node.position.y
+    })
+    nodeYPositions.current = yPositions
   }, [initialNodes, initialEdges, setNodes, setEdges])
 
   // Pan to selected profile when it changes (e.g. clicked in sidebar search)
@@ -156,17 +165,101 @@ function OrgChartCanvasInner({
     [isAdmin, setEdges]
   )
 
-  const handleNodeDragStop = useCallback(
+  // Handler for when drag starts - store initial positions
+  const handleNodeDragStart = useCallback(
     (_event: React.MouseEvent, node: any) => {
       if (isAdmin) {
+        dragStartPositions.current[node.id] = { x: node.position.x, y: node.position.y }
+      }
+    },
+    [isAdmin]
+  )
+
+  // Handler during drag - lock Y coordinate to enforce horizontal-only movement
+  const handleNodeDrag = useCallback(
+    (_event: React.MouseEvent, node: any) => {
+      if (isAdmin) {
+        const fixedY = nodeYPositions.current[node.id]
+        if (fixedY !== undefined) {
+          node.position.y = fixedY
+        }
+      }
+    },
+    [isAdmin]
+  )
+
+  // Handler when drag stops - snap to grid and handle swapping
+  const handleNodeDragStop = useCallback(
+    async (_event: React.MouseEvent, node: any) => {
+      if (!isAdmin) return
+
+      const fixedY = nodeYPositions.current[node.id]
+      if (fixedY === undefined) return
+
+      // Snap X to nearest slot
+      const snappedX = Math.round(node.position.x / SLOT_WIDTH) * SLOT_WIDTH
+
+      // Find if there's a sibling at the target position (within tolerance)
+      const siblings = nodesRef.current.filter(
+        (n) => n.id !== node.id && Math.abs(n.position.y - fixedY) < 5
+      )
+
+      const collision = siblings.find(
+        (sibling) => Math.abs(sibling.position.x - snappedX) < 5
+      )
+
+      if (collision && dragStartPositions.current[node.id]) {
+        // Swap positions
+        const oldPosition = dragStartPositions.current[node.id]
+
+        setNodes((nds) =>
+          nds.map((n) => {
+            if (n.id === node.id) {
+              return { ...n, position: { x: snappedX, y: fixedY } }
+            }
+            if (n.id === collision.id) {
+              return { ...n, position: { x: oldPosition.x, y: fixedY } }
+            }
+            return n
+          })
+        )
+
+        // Save both positions to database
+        try {
+          await Promise.all([
+            updatePosition.mutateAsync({
+              profile_id: node.id,
+              x_position: snappedX,
+              y_position: fixedY,
+            }),
+            updatePosition.mutateAsync({
+              profile_id: collision.id,
+              x_position: oldPosition.x,
+              y_position: fixedY,
+            }),
+          ])
+        } catch (error) {
+          console.error('Failed to save swapped positions:', error)
+        }
+      } else {
+        // No collision, just snap to grid
+        setNodes((nds) =>
+          nds.map((n) => {
+            if (n.id === node.id) {
+              return { ...n, position: { x: snappedX, y: fixedY } }
+            }
+            return n
+          })
+        )
+
         updatePosition.mutate({
           profile_id: node.id,
-          x_position: node.position.x,
-          y_position: node.position.y,
+          x_position: snappedX,
+          y_position: fixedY,
         })
       }
     },
-    [isAdmin, updatePosition]
+    [isAdmin, updatePosition, setNodes]
   )
 
   const handleNodeClick = useCallback(
@@ -184,6 +277,8 @@ function OrgChartCanvasInner({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDrag={handleNodeDrag}
         onNodeDragStop={handleNodeDragStop}
         onNodeClick={handleNodeClick}
         nodeTypes={nodeTypes}

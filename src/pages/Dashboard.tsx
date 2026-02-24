@@ -11,7 +11,7 @@ import { OnboardingWizard } from '../components/onboarding/OnboardingWizard'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
 import { X, SlidersHorizontal } from 'lucide-react'
-import { useDepartments, getDepartmentDescendantIds } from '../lib/queries'
+import { useDepartments, getDepartmentDescendantIds, useOrgChartPositions } from '../lib/queries'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -27,6 +27,7 @@ export default function Dashboard() {
 
   const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()
   const { data: allDepartments } = useDepartments()
+  const { data: savedPositions } = useOrgChartPositions()
 
   // Set initial department filter when currentProfile loads (only once)
   useEffect(() => {
@@ -161,6 +162,7 @@ export default function Dashboard() {
             searchQuery={searchQuery}
             selectedDepartment={selectedDepartment}
             allDepartments={allDepartments || []}
+            savedPositions={savedPositions}
           />
         )}
 
