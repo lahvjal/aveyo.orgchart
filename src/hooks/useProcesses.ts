@@ -100,6 +100,102 @@ export function useDeleteProcess() {
   })
 }
 
+export function useDuplicateProcess() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (process: Process) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      // Create new process
+      const { data: newProcess, error: processError } = await (supabase as any)
+        .from('processes')
+        .insert({
+          name: `Copy of ${process.name}`,
+          description: process.description,
+          created_by: user.id,
+        })
+        .select()
+        .single()
+
+      if (processError) throw processError
+
+      // Fetch original nodes
+      const { data: nodes, error: nodesError } = await (supabase as any)
+        .from('process_nodes')
+        .select('*')
+        .eq('process_id', process.id)
+
+      if (nodesError) throw nodesError
+
+      const nodeIdMap = new Map<string, string>()
+
+      if (nodes && nodes.length > 0) {
+        // Insert each node and build old->new id mapping
+        await Promise.all(
+          (nodes as ProcessNode[]).map(async (n) => {
+            const { data: newNode, error } = await (supabase as any)
+              .from('process_nodes')
+              .insert({
+                process_id: newProcess.id,
+                node_type: n.node_type,
+                label: n.label,
+                description: n.description,
+                x_position: n.x_position,
+                y_position: n.y_position,
+                tagged_profile_ids: n.tagged_profile_ids,
+                tagged_department_ids: n.tagged_department_ids,
+              })
+              .select()
+              .single()
+
+            if (error) throw error
+            nodeIdMap.set(n.id, newNode.id)
+          })
+        )
+
+        // Fetch original edges
+        const { data: edges, error: edgesError } = await (supabase as any)
+          .from('process_edges')
+          .select('*')
+          .eq('process_id', process.id)
+
+        if (edgesError) throw edgesError
+
+        if (edges && edges.length > 0) {
+          await Promise.all(
+            (edges as ProcessEdge[]).map(async (e) => {
+              const newSourceId = nodeIdMap.get(e.source_node_id)
+              const newTargetId = nodeIdMap.get(e.target_node_id)
+              if (!newSourceId || !newTargetId) return
+
+              const { error } = await (supabase as any)
+                .from('process_edges')
+                .insert({
+                  process_id: newProcess.id,
+                  source_node_id: newSourceId,
+                  target_node_id: newTargetId,
+                  label: e.label,
+                  source_side: e.source_side,
+                  target_side: e.target_side,
+                  waypoints: e.waypoints,
+                })
+
+              if (error) throw error
+            })
+          )
+        }
+      }
+
+      return newProcess as Process
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['processes'] })
+    },
+  })
+}
+
 // ── Process Nodes ─────────────────────────────────────────────────────────────
 
 export function useProcessNodes(processId: string | null) {

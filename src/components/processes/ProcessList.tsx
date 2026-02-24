@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, GitFork, Trash2, Pencil, Loader2, Calendar } from 'lucide-react'
+import { Plus, GitFork, Trash2, Pencil, Loader2, Calendar, Copy } from 'lucide-react'
 import { format } from 'date-fns'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -12,6 +12,7 @@ import {
   useCreateProcess,
   useUpdateProcess,
   useDeleteProcess,
+  useDuplicateProcess,
 } from '../../hooks/useProcesses'
 
 interface ProcessListProps {
@@ -27,12 +28,14 @@ export function ProcessList({ canCreate, currentUserId, isAdmin, isProcessEditor
   const createProcess = useCreateProcess()
   const updateProcess = useUpdateProcess()
   const deleteProcess = useDeleteProcess()
+  const duplicateProcess = useDuplicateProcess()
 
   const [createOpen, setCreateOpen] = useState(false)
   const [renameTarget, setRenameTarget] = useState<Process | null>(null)
   const [renameValue, setRenameName] = useState('')
   const [deleteTarget, setDeleteTarget] = useState<Process | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null)
 
   const canManage = (process: Process) => isAdmin || isProcessEditor || process.created_by === currentUserId
 
@@ -60,6 +63,18 @@ export function ProcessList({ canCreate, currentUserId, isAdmin, isProcessEditor
       setDeleteTarget(null)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleDuplicate = async (process: Process) => {
+    setDuplicatingId(process.id)
+    try {
+      await duplicateProcess.mutateAsync(process)
+    } catch (err) {
+      console.error('Failed to duplicate process:', err)
+      alert(`Failed to duplicate process: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setDuplicatingId(null)
     }
   }
 
@@ -131,6 +146,17 @@ export function ProcessList({ canCreate, currentUserId, isAdmin, isProcessEditor
                         title="Rename"
                       >
                         <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDuplicate(process)}
+                        disabled={duplicatingId === process.id}
+                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors disabled:opacity-50"
+                        title="Duplicate"
+                      >
+                        {duplicatingId === process.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <Copy className="h-3.5 w-3.5" />
+                        }
                       </button>
                       <button
                         onClick={() => setDeleteTarget(process)}
