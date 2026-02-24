@@ -19,17 +19,61 @@ export function useDepartments({ enabled = true }: { enabled?: boolean } = {}) {
   })
 }
 
+/** Builds a nested tree from a flat department list. Returns only root nodes (parent_id === null). */
+export function buildDepartmentTree(flat: Department[]): Department[] {
+  const map = new Map<string, Department>()
+  flat.forEach((d) => map.set(d.id, { ...d, children: [] }))
+  const roots: Department[] = []
+  map.forEach((node) => {
+    if (node.parent_id && map.has(node.parent_id)) {
+      map.get(node.parent_id)!.children!.push(node)
+    } else {
+      roots.push(node)
+    }
+  })
+  return roots
+}
+
+/** Returns all descendant IDs (inclusive of the given id) from a flat list. */
+export function getDepartmentDescendantIds(id: string, flat: Department[]): string[] {
+  const result: string[] = [id]
+  const queue = [id]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    flat.forEach((d) => {
+      if (d.parent_id === current) {
+        result.push(d.id)
+        queue.push(d.id)
+      }
+    })
+  }
+  return result
+}
+
+/** Returns the ancestor path from root down to (and including) the given department id. */
+export function getDepartmentAncestorPath(id: string, flat: Department[]): Department[] {
+  const map = new Map(flat.map((d) => [d.id, d]))
+  const path: Department[] = []
+  let current = map.get(id)
+  while (current) {
+    path.unshift(current)
+    current = current.parent_id ? map.get(current.parent_id) : undefined
+  }
+  return path
+}
+
 export function useCreateDepartment() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (department: Omit<Department, 'id' | 'created_at'>) => {
+    mutationFn: async (department: Omit<Department, 'id' | 'created_at' | 'children'>) => {
       const { data, error } = await supabase
         .from('departments')
         .insert({
           name: department.name,
           color: department.color,
           description: department.description,
+          parent_id: department.parent_id ?? null,
         } as any)
         .select()
         .single()
@@ -47,8 +91,8 @@ export function useUpdateDepartment() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async (updates: Partial<Department> & { id: string }) => {
-      const { id, created_at, ...departmentUpdates } = updates as any
+    mutationFn: async (updates: Partial<Omit<Department, 'children'>> & { id: string }) => {
+      const { id, created_at, children, ...departmentUpdates } = updates as any
       const { data, error } = await (supabase as any)
         .from('departments')
         .update(departmentUpdates)

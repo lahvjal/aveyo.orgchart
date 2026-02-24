@@ -12,7 +12,8 @@ import {
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
-import { Loader2, CheckCircle2, AlertCircle, Info } from 'lucide-react'
+import { Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { CascadingDepartmentSelect } from './CascadingDepartmentSelect'
 
 interface AddEmployeeDialogProps {
   open: boolean
@@ -254,32 +255,13 @@ export function AddEmployeeDialog({ open, onOpenChange }: AddEmployeeDialogProps
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="department">
-                Department
-                {departmentAutoFilled && (
-                  <span className="ml-2 text-xs text-muted-foreground">(auto-filled from manager)</span>
-                )}
-              </Label>
-              <select
-                id="department"
+              <CascadingDepartmentSelect
+                departments={departments || []}
                 value={departmentId}
-                onChange={(e) => handleDepartmentChange(e.target.value)}
+                onChange={handleDepartmentChange}
                 disabled={inviteEmployee.isPending}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <option value="">No Department</option>
-                {departments?.map((dept) => (
-                  <option key={dept.id} value={dept.id}>
-                    {dept.name}
-                  </option>
-                ))}
-              </select>
-              {departmentAutoFilled && (
-                <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <Info className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                  <span>Department automatically set from manager. You can change it if needed.</span>
-                </div>
-              )}
+                autoFilledNote={departmentAutoFilled ? '(auto-filled from manager)' : undefined}
+              />
             </div>
 
             <div className="space-y-2">

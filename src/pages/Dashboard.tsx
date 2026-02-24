@@ -11,6 +11,7 @@ import { OnboardingWizard } from '../components/onboarding/OnboardingWizard'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
 import { X, SlidersHorizontal } from 'lucide-react'
+import { useDepartments, getDepartmentDescendantIds } from '../lib/queries'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const hasInitializedDepartment = useRef(false)
 
   const { data: allProfiles, isLoading: allProfilesLoading, error: allProfilesError } = useProfiles()
+  const { data: allDepartments } = useDepartments()
 
   // Set initial department filter when currentProfile loads (only once)
   useEffect(() => {
@@ -49,8 +51,11 @@ export default function Dashboard() {
   const profiles = useMemo(() => {
     if (!allProfiles) return []
     if (!selectedDepartment) return allProfiles
-    return allProfiles.filter((profile) => profile.department_id === selectedDepartment)
-  }, [allProfiles, selectedDepartment])
+    const matchingIds = new Set(
+      getDepartmentDescendantIds(selectedDepartment, allDepartments || []),
+    )
+    return allProfiles.filter((profile) => profile.department_id && matchingIds.has(profile.department_id))
+  }, [allProfiles, selectedDepartment, allDepartments])
 
   const isLoading = permissionsLoading || allProfilesLoading
 
@@ -121,6 +126,7 @@ export default function Dashboard() {
 
         <EmployeeSearch
           profiles={allProfiles || []}
+          departments={allDepartments || []}
           onSelectEmployee={(id) => {
             setSelectedProfileId(id)
             setSidebarOpen(false) // Close sidebar on mobile after selecting

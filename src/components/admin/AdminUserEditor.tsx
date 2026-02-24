@@ -6,8 +6,9 @@ import { Button } from '../ui/button'
 import { Input } from '../ui/input'
 import { Label } from '../ui/label'
 import { JobDescriptionEditor } from '../ui/JobDescriptionEditor'
-import { Loader2, Shield, Users, Info, BarChart2, GitFork } from 'lucide-react'
+import { Loader2, Shield, Users, BarChart2, GitFork } from 'lucide-react'
 import { PhotoUpload } from '../profile/PhotoUpload'
+import { CascadingDepartmentSelect } from './CascadingDepartmentSelect'
 
 interface AdminUserEditorProps {
   profile: Profile
@@ -143,31 +144,12 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="department">
-          Department
-          {departmentAutoFilled && (
-            <span className="ml-2 text-xs text-muted-foreground">(auto-updated from manager)</span>
-          )}
-        </Label>
-        <select
-          id="department"
+        <CascadingDepartmentSelect
+          departments={departments || []}
           value={formData.department_id}
-          onChange={(e) => handleDepartmentChange(e.target.value)}
-          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <option value="">No Department</option>
-          {departments?.map((dept) => (
-            <option key={dept.id} value={dept.id}>
-              {dept.name}
-            </option>
-          ))}
-        </select>
-        {departmentAutoFilled && (
-          <div className="flex items-start gap-2 text-xs text-muted-foreground">
-            <Info className="h-3 w-3 mt-0.5 shrink-0" />
-            <span>Department automatically updated from manager. You can change it if needed.</span>
-          </div>
-        )}
+          onChange={handleDepartmentChange}
+          autoFilledNote={departmentAutoFilled ? '(auto-updated from manager)' : undefined}
+        />
       </div>
 
       <div className="space-y-2">

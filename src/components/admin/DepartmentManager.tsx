@@ -1,5 +1,16 @@
-import { useState } from 'react'
-import { useDepartments, useCreateDepartment, useUpdateDepartment } from '../../lib/queries'
+import { useState, useMemo } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core'
+import { useDraggable, useDroppable } from '@dnd-kit/core'
+import { useDepartments, useCreateDepartment, useUpdateDepartment, buildDepartmentTree, getDepartmentDescendantIds } from '../../lib/queries'
 import type { Department } from '../../types'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -7,7 +18,126 @@ import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
-import { Plus, Edit2, Loader2 } from 'lucide-react'
+import { Plus, Edit2, Loader2, ChevronRight, ChevronDown, GripVertical } from 'lucide-react'
+import { cn } from '../../lib/utils'
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface FlatNode {
+  dept: Department
+  depth: number
+}
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+function buildFlatNodes(dept: Department, depth: number, collapsed: Set<string>, result: FlatNode[]) {
+  result.push({ dept, depth })
+  if (!collapsed.has(dept.id) && dept.children && dept.children.length > 0) {
+    for (const child of dept.children) {
+      buildFlatNodes(child, depth + 1, collapsed, result)
+    }
+  }
+}
+
+function getDeptLabel(depth: number): string {
+  if (depth === 0) return 'Department'
+  return 'Sub-department'
+}
+
+// ─── Draggable row ────────────────────────────────────────────────────────────
+
+interface DeptRowProps {
+  node: FlatNode
+  isOver: boolean
+  isActive: boolean
+  onEdit: (dept: Department) => void
+  onToggleCollapse: (id: string) => void
+  isCollapsed: boolean
+  hasChildren: boolean
+}
+
+function DeptRow({ node, isOver, isActive: _isActive, onEdit, onToggleCollapse, isCollapsed, hasChildren }: DeptRowProps) {
+  const { dept, depth } = node
+
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: dept.id })
+  const { setNodeRef: setDropRef, isOver: isDropOver } = useDroppable({ id: dept.id })
+
+  const isDropTarget = isOver || isDropOver
+
+  // Combine refs
+  const ref = (el: HTMLDivElement | null) => {
+    setDragRef(el)
+    setDropRef(el)
+  }
+
+  return (
+    <div
+      ref={ref}
+      style={{ paddingLeft: `${depth * 24 + 4}px` }}
+      className={cn(
+        'flex items-center gap-2 p-2 rounded-lg border transition-colors',
+        isDragging && 'opacity-30',
+        isDropTarget && !isDragging && 'bg-primary/5 border-primary/40 ring-1 ring-primary/30',
+        !isDropTarget && !isDragging && 'hover:bg-accent',
+      )}
+    >
+      {/* Collapse toggle */}
+      <button
+        type="button"
+        onClick={() => hasChildren && onToggleCollapse(dept.id)}
+        className={cn('p-0.5 rounded text-muted-foreground', hasChildren ? 'hover:text-foreground' : 'invisible')}
+      >
+        {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+      </button>
+
+      {/* Drag handle */}
+      <button
+        type="button"
+        className="cursor-grab touch-none text-muted-foreground hover:text-foreground p-0.5"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      {/* Department info */}
+      <div className="flex items-center gap-2 flex-1 min-w-0">
+        <Badge style={{ backgroundColor: dept.color, color: 'white' }} className="shrink-0">
+          {dept.name}
+        </Badge>
+        <span className="text-xs text-muted-foreground shrink-0">{getDeptLabel(depth)}</span>
+        {dept.description && (
+          <span className="text-sm text-muted-foreground truncate">{dept.description}</span>
+        )}
+      </div>
+
+      {/* Edit button */}
+      <Button variant="ghost" size="icon" onClick={() => onEdit(dept)} className="shrink-0">
+        <Edit2 className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+
+// ─── Root droppable zone ──────────────────────────────────────────────────────
+
+function RootDropZone({ isActive }: { isActive: boolean }) {
+  const { setNodeRef, isOver } = useDroppable({ id: '__root__' })
+  if (!isActive) return null
+  return (
+    <div
+      ref={setNodeRef}
+      className={cn(
+        'flex items-center justify-center h-10 rounded-lg border-2 border-dashed text-sm transition-colors mb-2',
+        isOver ? 'border-primary bg-primary/5 text-primary' : 'border-muted-foreground/30 text-muted-foreground',
+      )}
+    >
+      Drop here to make a root department
+    </div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 
 export function DepartmentManager() {
   const { data: departments, isLoading } = useDepartments()
@@ -16,28 +146,41 @@ export function DepartmentManager() {
 
   const [isEditing, setIsEditing] = useState(false)
   const [editingDept, setEditingDept] = useState<Department | null>(null)
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+
   const [formData, setFormData] = useState({
     name: '',
     color: '#6366f1',
     description: '',
+    parent_id: null as string | null,
   })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  )
 
-    if (editingDept) {
-      await updateDepartment.mutateAsync({
-        id: editingDept.id,
-        ...formData,
-      })
-    } else {
-      await createDepartment.mutateAsync(formData)
-    }
+  const tree = useMemo(() => buildDepartmentTree(departments || []), [departments])
 
-    // Reset form
-    setFormData({ name: '', color: '#6366f1', description: '' })
-    setIsEditing(false)
-    setEditingDept(null)
+  const flatNodes = useMemo(() => {
+    const result: FlatNode[] = []
+    tree.forEach((root) => buildFlatNodes(root, 0, collapsed, result))
+    return result
+  }, [tree, collapsed])
+
+  const activeDept = useMemo(
+    () => departments?.find((d) => d.id === activeId) ?? null,
+    [departments, activeId],
+  )
+
+  const handleToggleCollapse = (id: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   const handleEdit = (dept: Department) => {
@@ -46,6 +189,7 @@ export function DepartmentManager() {
       name: dept.name,
       color: dept.color,
       description: dept.description || '',
+      parent_id: dept.parent_id ?? null,
     })
     setIsEditing(true)
   }
@@ -53,7 +197,56 @@ export function DepartmentManager() {
   const handleCancel = () => {
     setIsEditing(false)
     setEditingDept(null)
-    setFormData({ name: '', color: '#6366f1', description: '' })
+    setFormData({ name: '', color: '#6366f1', description: '', parent_id: null })
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (editingDept) {
+      await updateDepartment.mutateAsync({ id: editingDept.id, ...formData })
+    } else {
+      await createDepartment.mutateAsync(formData)
+    }
+    handleCancel()
+  }
+
+  // Departments that can be chosen as parent in form (exclude self + own descendants when editing)
+  const parentOptions = useMemo(() => {
+    if (!departments) return []
+    if (!editingDept) return departments
+    const forbidden = new Set(getDepartmentDescendantIds(editingDept.id, departments))
+    return departments.filter((d) => !forbidden.has(d.id))
+  }, [departments, editingDept])
+
+  // ── DnD handlers ──
+  const handleDragStart = ({ active }: DragStartEvent) => {
+    setActiveId(active.id as string)
+  }
+
+  const handleDragOver = ({ over }: DragOverEvent) => {
+    setOverId(over ? (over.id as string) : null)
+  }
+
+  const handleDragEnd = async ({ active, over }: DragEndEvent) => {
+    setActiveId(null)
+    setOverId(null)
+
+    if (!over || active.id === over.id) return
+
+    const draggedId = active.id as string
+    const targetId = over.id as string
+
+    // Prevent nesting under own descendants (cycle prevention)
+    if (targetId !== '__root__') {
+      const descendants = getDepartmentDescendantIds(draggedId, departments || [])
+      if (descendants.includes(targetId)) return
+    }
+
+    const newParentId = targetId === '__root__' ? null : targetId
+    const dragged = departments?.find((d) => d.id === draggedId)
+    if (!dragged || dragged.parent_id === newParentId) return
+
+    await updateDepartment.mutateAsync({ id: draggedId, parent_id: newParentId })
   }
 
   if (isLoading) {
@@ -70,7 +263,7 @@ export function DepartmentManager() {
           <CardDescription>
             {isEditing
               ? 'Configure department details and color coding'
-              : 'Manage organization departments'}
+              : 'Manage departments — drag a department onto another to nest it as a sub-department'}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -81,7 +274,7 @@ export function DepartmentManager() {
                 <Input
                   id="name"
                   value={formData.name}
-                  onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
                   required
                   placeholder="e.g., Engineering"
                 />
@@ -94,14 +287,31 @@ export function DepartmentManager() {
                     id="color"
                     type="color"
                     value={formData.color}
-                    onChange={(e) => setFormData(prev => ({ ...prev, color: e.target.value }))}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, color: e.target.value }))}
                     className="w-20 h-10"
                     required
                   />
-                  <Badge style={{ backgroundColor: formData.color, color: 'white' }}>
-                    Preview
-                  </Badge>
+                  <Badge style={{ backgroundColor: formData.color, color: 'white' }}>Preview</Badge>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="parent">Parent Department</Label>
+                <select
+                  id="parent"
+                  value={formData.parent_id ?? ''}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, parent_id: e.target.value || null }))
+                  }
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">None (root department)</option>
+                  {parentOptions.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -109,15 +319,15 @@ export function DepartmentManager() {
                 <Textarea
                   id="description"
                   value={formData.description}
-                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Optional description"
                   rows={3}
                 />
               </div>
 
               <div className="flex gap-2">
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   disabled={createDepartment.isPending || updateDepartment.isPending}
                 >
                   {(createDepartment.isPending || updateDepartment.isPending) && (
@@ -137,30 +347,48 @@ export function DepartmentManager() {
                 Add Department
               </Button>
 
-              <div className="space-y-2">
-                {departments?.map((dept) => (
-                  <div
-                    key={dept.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <Badge style={{ backgroundColor: dept.color, color: 'white' }}>
-                        {dept.name}
+              <DndContext
+                sensors={sensors}
+                onDragStart={handleDragStart}
+                onDragOver={handleDragOver}
+                onDragEnd={handleDragEnd}
+              >
+                <RootDropZone isActive={!!activeId} />
+
+                <div className="space-y-1">
+                  {flatNodes.map(({ dept, depth }) => {
+                    const hasChildren = (dept.children?.length ?? 0) > 0
+                    return (
+                      <DeptRow
+                        key={dept.id}
+                        node={{ dept, depth }}
+                        isOver={overId === dept.id}
+                        isActive={activeId === dept.id}
+                        onEdit={handleEdit}
+                        onToggleCollapse={handleToggleCollapse}
+                        isCollapsed={collapsed.has(dept.id)}
+                        hasChildren={hasChildren}
+                      />
+                    )
+                  })}
+                  {flatNodes.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No departments yet. Add one above.
+                    </p>
+                  )}
+                </div>
+
+                <DragOverlay>
+                  {activeDept && (
+                    <div className="flex items-center gap-2 p-2 rounded-lg border bg-background shadow-lg opacity-90">
+                      <GripVertical className="h-4 w-4 text-muted-foreground" />
+                      <Badge style={{ backgroundColor: activeDept.color, color: 'white' }}>
+                        {activeDept.name}
                       </Badge>
-                      {dept.description && (
-                        <span className="text-sm text-muted-foreground">{dept.description}</span>
-                      )}
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleEdit(dept)}
-                    >
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
+                  )}
+                </DragOverlay>
+              </DndContext>
             </div>
           )}
         </CardContent>

@@ -37,7 +37,9 @@ export interface Department {
   name: string
   color: string
   description: string | null
+  parent_id: string | null
   created_at: string
+  children?: Department[]
 }
 
 export interface OrgChartPosition {

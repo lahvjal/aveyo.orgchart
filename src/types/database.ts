@@ -89,6 +89,7 @@ export interface Database {
           name: string
           color: string
           description: string | null
+          parent_id: string | null
           created_at: string
         }
         Insert: {
@@ -96,6 +97,7 @@ export interface Database {
           name: string
           color: string
           description?: string | null
+          parent_id?: string | null
           created_at?: string
         }
         Update: {
@@ -103,6 +105,7 @@ export interface Database {
           name?: string
           color?: string
           description?: string | null
+          parent_id?: string | null
           created_at?: string
         }
       }

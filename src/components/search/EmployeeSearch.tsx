@@ -1,14 +1,18 @@
 import { useState, useMemo } from 'react'
-import type { Profile } from '../../types'
+import type { Profile, Department } from '../../types'
 import { Input } from '../ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar'
 import { Badge } from '../ui/badge'
 import { getInitials } from '../../lib/utils'
-import { Search, X } from 'lucide-react'
+import { Search, X, ChevronRight } from 'lucide-react'
 import { Button } from '../ui/button'
+import { buildDepartmentTree, getDepartmentDescendantIds } from '../../lib/queries'
+import { cn } from '../../lib/utils'
 
 interface EmployeeSearchProps {
   profiles: Profile[]
+  /** Full flat list of all departments (for hierarchy display + cascading filter) */
+  departments?: Department[]
   onSelectEmployee: (profileId: string) => void
   currentUserDepartmentId?: string
   selectedDepartment?: string | null
@@ -16,9 +20,34 @@ interface EmployeeSearchProps {
   onSearchChange?: (query: string) => void
 }
 
-export function EmployeeSearch({ 
-  profiles, 
-  onSelectEmployee, 
+interface FlatFilterNode {
+  dept: Department
+  depth: number
+  hasEmployees: boolean
+}
+
+function buildFilterNodes(
+  nodes: Department[],
+  depth: number,
+  employeeDeptIds: Set<string>,
+  flat: Department[],
+  result: FlatFilterNode[],
+) {
+  for (const node of nodes) {
+    // A node "has employees" if it or any of its descendants contains someone
+    const descendantIds = getDepartmentDescendantIds(node.id, flat)
+    const hasEmployees = descendantIds.some((id) => employeeDeptIds.has(id))
+    result.push({ dept: node, depth, hasEmployees })
+    if (node.children && node.children.length > 0) {
+      buildFilterNodes(node.children, depth + 1, employeeDeptIds, flat, result)
+    }
+  }
+}
+
+export function EmployeeSearch({
+  profiles,
+  departments = [],
+  onSelectEmployee,
   currentUserDepartmentId,
   selectedDepartment: propSelectedDepartment,
   onDepartmentChange,
@@ -30,27 +59,34 @@ export function EmployeeSearch({
     setSearchQuery(value)
     onSearchChange?.(value)
   }
-  // Use prop if explicitly provided (even if null), otherwise default to the current user's department
-  const selectedDepartment = propSelectedDepartment !== undefined 
-    ? propSelectedDepartment 
-    : (currentUserDepartmentId || null)
-  
+
+  const selectedDepartment =
+    propSelectedDepartment !== undefined ? propSelectedDepartment : currentUserDepartmentId || null
+
   const handleDepartmentChange = (departmentId: string | null) => {
-    if (onDepartmentChange) {
-      onDepartmentChange(departmentId)
-    }
+    onDepartmentChange?.(departmentId)
   }
 
-  const departments = useMemo(() => {
-    const depts = new Map<string, { id: string; name: string; color: string }>()
-    profiles.forEach((profile) => {
-      if (profile.department) {
-        depts.set(profile.department.id, profile.department)
-      }
+  // Build tree from the departments prop
+  const tree = useMemo(() => buildDepartmentTree(departments), [departments])
+
+  // Set of dept IDs that have at least one employee
+  const employeeDeptIds = useMemo(() => {
+    const ids = new Set<string>()
+    profiles.forEach((p) => {
+      if (p.department_id) ids.add(p.department_id)
     })
-    return Array.from(depts.values())
+    return ids
   }, [profiles])
 
+  // Flat ordered list for rendering filter badges
+  const filterNodes = useMemo(() => {
+    const result: FlatFilterNode[] = []
+    buildFilterNodes(tree, 0, employeeDeptIds, departments, result)
+    return result.filter((n) => n.hasEmployees)
+  }, [tree, employeeDeptIds, departments])
+
+  // Cascading filter: when a department is selected, include all descendants
   const filteredProfiles = useMemo(() => {
     return profiles.filter((profile) => {
       const matchesSearch =
@@ -59,12 +95,15 @@ export function EmployeeSearch({
         profile.job_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         profile.email.toLowerCase().includes(searchQuery.toLowerCase())
 
-      const matchesDepartment =
-        !selectedDepartment || profile.department_id === selectedDepartment
+      let matchesDepartment = true
+      if (selectedDepartment) {
+        const descendantIds = new Set(getDepartmentDescendantIds(selectedDepartment, departments))
+        matchesDepartment = !!profile.department_id && descendantIds.has(profile.department_id)
+      }
 
       return matchesSearch && matchesDepartment
     })
-  }, [profiles, searchQuery, selectedDepartment])
+  }, [profiles, searchQuery, selectedDepartment, departments])
 
   return (
     <div className="space-y-4 h-full">
@@ -88,10 +127,10 @@ export function EmployeeSearch({
         )}
       </div>
 
-      {departments.length > 0 && (
+      {filterNodes.length > 0 && (
         <div>
           <p className="text-xs text-muted-foreground mb-2 font-medium">Filter by Department</p>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1.5">
             <Badge
               variant={selectedDepartment === null ? 'default' : 'outline'}
               className="cursor-pointer"
@@ -102,23 +141,29 @@ export function EmployeeSearch({
               }
               onClick={() => handleDepartmentChange(null)}
             >
-              All Departments
+              All
             </Badge>
-            {departments.map((dept) => (
-              <Badge
-                key={dept.id}
-                variant={selectedDepartment === dept.id ? 'default' : 'outline'}
-                className="cursor-pointer"
-                style={
-                  selectedDepartment === dept.id
-                    ? { backgroundColor: dept.color, color: 'white' }
-                    : undefined
-                }
-                onClick={() => handleDepartmentChange(dept.id)}
-              >
-                {dept.name}
-              </Badge>
-            ))}
+            {filterNodes.map(({ dept, depth }) => {
+              const isSelected = selectedDepartment === dept.id
+              return (
+                <Badge
+                  key={dept.id}
+                  variant={isSelected ? 'default' : 'outline'}
+                  className={cn('cursor-pointer flex items-center gap-1', depth > 0 && 'pl-1')}
+                  style={isSelected ? { backgroundColor: dept.color, color: 'white' } : undefined}
+                  onClick={() => handleDepartmentChange(isSelected ? null : dept.id)}
+                >
+                  {depth > 0 && (
+                    <span className="flex items-center opacity-50">
+                      {Array.from({ length: depth }).map((_, i) => (
+                        <ChevronRight key={i} className="h-3 w-3 -mx-0.5" />
+                      ))}
+                    </span>
+                  )}
+                  {dept.name}
+                </Badge>
+              )
+            })}
           </div>
         </div>
       )}
