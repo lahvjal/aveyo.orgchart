@@ -3,6 +3,14 @@ import type { Node, Edge } from 'reactflow'
 import dagre from 'dagre'
 import type { Profile, OrgChartPosition } from '../types'
 
+// Snap grid constants - must match canvas SLOT_WIDTH
+const SLOT_WIDTH = 320 // 220px node width + 100px gap
+
+// Utility to snap a position to the grid
+function snapToGrid(value: number): number {
+  return Math.round(value / SLOT_WIDTH) * SLOT_WIDTH
+}
+
 export function useOrgChart(
   profiles: Profile[], 
   isAdmin: boolean, 
@@ -81,16 +89,21 @@ export function useOrgChart(
     dagre.layout(dagreGraph)
 
     // Create a map of saved positions for quick lookup
+    // Snap saved X positions to grid to ensure alignment
     const savedPosMap = new Map(
-      savedPositions?.map((pos) => [pos.profile_id, { x: pos.x_position, y: pos.y_position }]) || []
+      savedPositions?.map((pos) => [
+        pos.profile_id, 
+        { x: snapToGrid(pos.x_position), y: pos.y_position }
+      ]) || []
     )
 
     // Apply calculated positions to nodes (dagre returns center coords, ReactFlow uses top-left)
     // If a saved position exists, use its X coordinate but keep dagre's Y (to preserve hierarchy)
+    // All X positions are snapped to grid for consistency
     return nodes.map((node) => {
       const nodeWithPosition = dagreGraph.node(node.id)
       const dagrePos = {
-        x: nodeWithPosition.x - NODE_WIDTH / 2,
+        x: snapToGrid(nodeWithPosition.x - NODE_WIDTH / 2),
         y: nodeWithPosition.y - NODE_HEIGHT / 2,
       }
       
@@ -99,8 +112,8 @@ export function useOrgChart(
       return {
         ...node,
         position: savedPos
-          ? { x: savedPos.x, y: dagrePos.y } // Use saved X, dagre Y
-          : dagrePos, // Use dagre for both if no saved position
+          ? { x: savedPos.x, y: dagrePos.y } // Use saved X (already snapped), dagre Y
+          : dagrePos, // Use dagre (X already snapped) for both if no saved position
       }
     })
   }, [nodes, edges, savedPositions])

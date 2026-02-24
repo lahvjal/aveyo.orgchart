@@ -280,12 +280,15 @@ function OrgChartCanvasInner({
         // First clear all existing positions
         await clearAllPositions.mutateAsync()
         
-        // Then save all current node positions (which are now fresh from dagre)
-        const positions = nodesRef.current.map((node) => ({
-          profile_id: node.id,
-          x_position: node.position.x,
-          y_position: node.position.y,
-        }))
+        // Then save all current node positions, snapped to grid
+        const positions = nodesRef.current.map((node) => {
+          const snappedX = Math.round(node.position.x / SLOT_WIDTH) * SLOT_WIDTH
+          return {
+            profile_id: node.id,
+            x_position: snappedX,
+            y_position: node.position.y,
+          }
+        })
         
         await batchSavePositions.mutateAsync(positions)
       } catch (error) {
