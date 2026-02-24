@@ -12,9 +12,9 @@ import ReactFlow, {
 import type { NodeTypes, Connection } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { EmployeeNode } from './EmployeeNode'
-import type { Profile } from '../../types'
+import type { Profile, Department } from '../../types'
 import { useOrgChart } from '../../hooks/useOrgChart'
-import { useUpdatePosition } from '../../lib/queries'
+import { useUpdatePosition, getDepartmentDescendantIds } from '../../lib/queries'
 
 interface OrgChartCanvasProps {
   profiles: Profile[]
@@ -24,6 +24,8 @@ interface OrgChartCanvasProps {
   onNodeClick?: (profileId: string) => void
   selectedProfileId?: string | null
   searchQuery?: string
+  selectedDepartment?: string | null
+  allDepartments?: Department[]
 }
 
 const nodeTypes: NodeTypes = {
@@ -34,10 +36,12 @@ function OrgChartCanvasInner({
   profiles, 
   isAdmin, 
   currentUserId,
-  currentUserDepartmentId,
+  currentUserDepartmentId: _currentUserDepartmentId,
   onNodeClick,
   selectedProfileId,
   searchQuery = '',
+  selectedDepartment,
+  allDepartments,
 }: OrgChartCanvasProps) {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768)
 
@@ -56,7 +60,10 @@ function OrgChartCanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const updatePosition = useUpdatePosition()
   const { fitView } = useReactFlow()
-  const hasInitiallyFocused = useRef(false)
+
+  // Keep a ref to current nodes so fitView effects don't need nodes in their dep arrays
+  const nodesRef = useRef(nodes)
+  useEffect(() => { nodesRef.current = nodes }, [nodes])
 
   // Update nodes when profiles change
   useEffect(() => {
@@ -76,48 +83,59 @@ function OrgChartCanvasInner({
     }
   }, [selectedProfileId, fitView])
 
-  // Dim nodes that don't match the active search query
+  // Dim nodes that don't match the active department filter and/or search query
   useEffect(() => {
+    const deptMatchIds = selectedDepartment && allDepartments
+      ? new Set(getDepartmentDescendantIds(selectedDepartment, allDepartments))
+      : null
+
     setNodes((nds) =>
       nds.map((n) => {
-        if (!searchQuery) {
-          return { ...n, style: { ...n.style, opacity: 1 } }
-        }
         const profile = n.data?.profile as Profile
-        const q = searchQuery.toLowerCase()
-        const matches =
-          profile.full_name.toLowerCase().includes(q) ||
-          profile.job_title.toLowerCase().includes(q) ||
-          profile.email.toLowerCase().includes(q)
-        return { ...n, style: { ...n.style, opacity: matches ? 1 : 0.25 } }
+
+        const matchesDept = deptMatchIds
+          ? !!(profile.department_id && deptMatchIds.has(profile.department_id))
+          : true
+
+        const matchesSearch = searchQuery
+          ? (() => {
+              const q = searchQuery.toLowerCase()
+              return (
+                profile.full_name.toLowerCase().includes(q) ||
+                profile.job_title.toLowerCase().includes(q) ||
+                profile.email.toLowerCase().includes(q)
+              )
+            })()
+          : true
+
+        return { ...n, style: { ...n.style, opacity: matchesDept && matchesSearch ? 1 : 0.15 } }
       })
     )
-  }, [searchQuery, setNodes])
+  }, [searchQuery, selectedDepartment, allDepartments, setNodes])
 
-  // Focus on user's department on initial load
+  // Pan/zoom to the selected department's nodes whenever the filter changes
   useEffect(() => {
-    if (!hasInitiallyFocused.current && nodes.length > 0 && currentUserDepartmentId) {
-      // Find nodes in the user's department
-      const departmentNodeIds = nodes
-        .filter((node) => {
-          const profile = node.data?.profile as Profile
-          return profile?.department_id === currentUserDepartmentId
-        })
-        .map((node) => node.id)
+    const deptMatchIds = selectedDepartment && allDepartments
+      ? new Set(getDepartmentDescendantIds(selectedDepartment, allDepartments))
+      : null
 
-      if (departmentNodeIds.length > 0) {
-        // Focus on the user's department nodes with a slight delay to ensure layout is ready
-        setTimeout(() => {
-          fitView({
-            nodes: departmentNodeIds.map((id) => ({ id })),
-            padding: 0.2,
-            duration: 800,
-          })
-        }, 100)
-      }
-      hasInitiallyFocused.current = true
-    }
-  }, [nodes, currentUserDepartmentId, fitView])
+    const targetNodes = deptMatchIds
+      ? nodesRef.current.filter((n) => {
+          const profile = n.data?.profile as Profile
+          return profile?.department_id && deptMatchIds.has(profile.department_id)
+        })
+      : nodesRef.current
+
+    if (targetNodes.length === 0) return
+
+    setTimeout(() => {
+      fitView({
+        nodes: targetNodes.map((n) => ({ id: n.id })),
+        padding: 0.3,
+        duration: 700,
+      })
+    }, 80)
+  }, [selectedDepartment, allDepartments, fitView])
 
   const onConnect = useCallback(
     (connection: Connection) => {

@@ -104,7 +104,7 @@ export default function Dashboard() {
         </Button>
         {selectedDepartment && (
           <span className="text-xs text-muted-foreground">
-            Showing {profiles.length} employee{profiles.length !== 1 ? 's' : ''}
+            Focusing on {profiles.length} employee{profiles.length !== 1 ? 's' : ''}
           </span>
         )}
       </div>
@@ -119,8 +119,9 @@ export default function Dashboard() {
         <div className="mb-6">
           <h2 className="text-2xl font-bold mb-2">Organization Chart</h2>
           <p className="text-sm text-muted-foreground">
-            Browse and search {selectedDepartment ? profiles.length : allProfiles?.length || 0}{' '}
-            {selectedDepartment ? 'employees' : 'employees across all departments'}
+            {selectedDepartment
+              ? `Focusing on ${profiles.length} of ${allProfiles?.length || 0} employees`
+              : `Browse and search ${allProfiles?.length || 0} employees`}
           </p>
         </div>
 
@@ -151,13 +152,15 @@ export default function Dashboard() {
           </div>
         ) : (
           <OrgChartCanvas
-            profiles={profiles}
+            profiles={allProfiles || []}
             isAdmin={isAdmin}
             currentUserId={user?.id}
             currentUserDepartmentId={currentProfile?.department_id || undefined}
             onNodeClick={setSelectedProfileId}
             selectedProfileId={selectedProfileId}
             searchQuery={searchQuery}
+            selectedDepartment={selectedDepartment}
+            allDepartments={allDepartments || []}
           />
         )}
 
