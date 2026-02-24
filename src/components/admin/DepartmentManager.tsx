@@ -10,7 +10,7 @@ import {
   type DragOverEvent,
 } from '@dnd-kit/core'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
-import { useDepartments, useCreateDepartment, useUpdateDepartment, buildDepartmentTree, getDepartmentDescendantIds } from '../../lib/queries'
+import { useDepartments, useCreateDepartment, useUpdateDepartment, useDeleteDepartment, buildDepartmentTree, getDepartmentDescendantIds } from '../../lib/queries'
 import type { Department } from '../../types'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -18,7 +18,7 @@ import { Label } from '../ui/label'
 import { Textarea } from '../ui/textarea'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card'
 import { Badge } from '../ui/badge'
-import { Plus, Edit2, Loader2, ChevronRight, ChevronDown, GripVertical } from 'lucide-react'
+import { Plus, Edit2, Trash2, Loader2, ChevronRight, ChevronDown, GripVertical } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -51,12 +51,13 @@ interface DeptRowProps {
   isOver: boolean
   isActive: boolean
   onEdit: (dept: Department) => void
+  onDelete: (dept: Department) => void
   onToggleCollapse: (id: string) => void
   isCollapsed: boolean
   hasChildren: boolean
 }
 
-function DeptRow({ node, isOver, isActive: _isActive, onEdit, onToggleCollapse, isCollapsed, hasChildren }: DeptRowProps) {
+function DeptRow({ node, isOver, isActive: _isActive, onEdit, onDelete, onToggleCollapse, isCollapsed, hasChildren }: DeptRowProps) {
   const { dept, depth } = node
 
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({ id: dept.id })
@@ -115,6 +116,16 @@ function DeptRow({ node, isOver, isActive: _isActive, onEdit, onToggleCollapse, 
       <Button variant="ghost" size="icon" onClick={() => onEdit(dept)} className="shrink-0">
         <Edit2 className="h-4 w-4" />
       </Button>
+
+      {/* Delete button */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={() => onDelete(dept)}
+        className="shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   )
 }
@@ -143,9 +154,11 @@ export function DepartmentManager() {
   const { data: departments, isLoading } = useDepartments()
   const createDepartment = useCreateDepartment()
   const updateDepartment = useUpdateDepartment()
+  const deleteDepartment = useDeleteDepartment()
 
   const [isEditing, setIsEditing] = useState(false)
   const [editingDept, setEditingDept] = useState<Department | null>(null)
+  const [deletingDept, setDeletingDept] = useState<Department | null>(null)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
@@ -198,6 +211,12 @@ export function DepartmentManager() {
     setIsEditing(false)
     setEditingDept(null)
     setFormData({ name: '', color: '#6366f1', description: '', parent_id: null })
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingDept) return
+    await deleteDepartment.mutateAsync(deletingDept.id)
+    setDeletingDept(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -365,6 +384,7 @@ export function DepartmentManager() {
                         isOver={overId === dept.id}
                         isActive={activeId === dept.id}
                         onEdit={handleEdit}
+                        onDelete={setDeletingDept}
                         onToggleCollapse={handleToggleCollapse}
                         isCollapsed={collapsed.has(dept.id)}
                         hasChildren={hasChildren}
@@ -393,6 +413,30 @@ export function DepartmentManager() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete confirmation dialog */}
+      {deletingDept && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg border shadow-lg p-6 w-full max-w-sm space-y-4">
+            <div className="space-y-1">
+              <h3 className="font-semibold text-lg">Delete department?</h3>
+              <p className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">{deletingDept.name}</span> will be
+                permanently deleted. Any child departments will be moved to the root level.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setDeletingDept(null)} disabled={deleteDepartment.isPending}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteConfirm} disabled={deleteDepartment.isPending}>
+                {deleteDepartment.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

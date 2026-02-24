@@ -109,6 +109,24 @@ export function useUpdateDepartment() {
   })
 }
 
+export function useDeleteDepartment() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await (supabase as any)
+        .from('departments')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['departments'] })
+    },
+  })
+}
+
 // Org Chart Positions
 export function useOrgChartPositions() {
   return useQuery({
