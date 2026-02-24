@@ -24,6 +24,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
   const [departmentAutoFilled, setDepartmentAutoFilled] = useState(false)
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState(profile.profile_photo_url)
   const [formData, setFormData] = useState({
+    full_name: profile.full_name,
     job_title: profile.job_title,
     manager_id: profile.manager_id || '',
     department_id: profile.department_id || '',
@@ -37,6 +38,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
   // Reset form when profile changes
   useEffect(() => {
     setFormData({
+      full_name: profile.full_name,
       job_title: profile.job_title,
       manager_id: profile.manager_id || '',
       department_id: profile.department_id || '',
@@ -76,6 +78,7 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
 
     await updateProfile.mutateAsync({
       id: profile.id,
+      full_name: formData.full_name,
       job_title: formData.job_title,
       manager_id: formData.manager_id || null,
       department_id: formData.department_id || null,
@@ -109,9 +112,15 @@ export function AdminUserEditor({ profile, onSaved, onCancel }: AdminUserEditorP
           onPhotoUploaded={handlePhotoUploaded}
           size="sm"
         />
-        <div>
-          <p className="font-medium">{profile.full_name}</p>
-          <p className="text-sm text-muted-foreground">{profile.email}</p>
+        <div className="flex-1 min-w-0 space-y-1">
+          <Input
+            value={formData.full_name}
+            onChange={(e) => setFormData(prev => ({ ...prev, full_name: e.target.value }))}
+            placeholder="Full name"
+            required
+            className="font-medium h-8 text-sm"
+          />
+          <p className="text-xs text-muted-foreground px-1">{profile.email}</p>
         </div>
       </div>
 
