@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, {
   Background,
   Controls,
@@ -50,10 +50,20 @@ function OrgChartCanvasInner({
     window.addEventListener('resize', handler)
     return () => window.removeEventListener('resize', handler)
   }, [])
+  const focusedProfileIds = useMemo(() => {
+    if (!selectedDepartment || !allDepartments) return null
+    const matchingIds = new Set(getDepartmentDescendantIds(selectedDepartment, allDepartments))
+    const ids = profiles
+      .filter((p) => p.department_id && matchingIds.has(p.department_id))
+      .map((p) => p.id)
+    return ids.length > 0 && ids.length < profiles.length ? new Set(ids) : null
+  }, [selectedDepartment, allDepartments, profiles])
+
   const { nodes: initialNodes, edges: initialEdges } = useOrgChart(
     profiles,
     isAdmin,
-    currentUserId
+    currentUserId,
+    focusedProfileIds,
   )
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)

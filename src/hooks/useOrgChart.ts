@@ -3,88 +3,144 @@ import type { Node, Edge } from 'reactflow'
 import dagre from 'dagre'
 import type { Profile } from '../types'
 
-export function useOrgChart(profiles: Profile[], isAdmin: boolean, currentUserId?: string) {
+const NODE_WIDTH = 220
+const NODE_HEIGHT = 260
+
+function runDagreLayout(
+  profileSubset: Profile[],
+  allEdges: Edge[],
+): Map<string, { x: number; y: number }> {
+  if (profileSubset.length === 0) return new Map()
+
+  const subsetIds = new Set(profileSubset.map((p) => p.id))
+
+  const g = new dagre.graphlib.Graph()
+  g.setDefaultEdgeLabel(() => ({}))
+  g.setGraph({
+    rankdir: 'TB',
+    nodesep: 24,   // horizontal gap between sibling cards
+    ranksep: 56,   // vertical gap between ranks
+  })
+
+  profileSubset.forEach((p) => {
+    g.setNode(p.id, { width: NODE_WIDTH, height: NODE_HEIGHT })
+  })
+
+  // Only include edges where both endpoints are in the subset
+  allEdges.forEach((edge) => {
+    if (subsetIds.has(edge.source) && subsetIds.has(edge.target)) {
+      g.setEdge(edge.source, edge.target)
+    }
+  })
+
+  dagre.layout(g)
+
+  const positions = new Map<string, { x: number; y: number }>()
+  profileSubset.forEach((p) => {
+    const n = g.node(p.id)
+    positions.set(p.id, { x: n.x - NODE_WIDTH / 2, y: n.y - NODE_HEIGHT / 2 })
+  })
+  return positions
+}
+
+function getBounds(positions: Map<string, { x: number; y: number }>) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  positions.forEach(({ x, y }) => {
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x + NODE_WIDTH)
+    minY = Math.min(minY, y)
+    maxY = Math.max(maxY, y + NODE_HEIGHT)
+  })
+  return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY }
+}
+
+export function useOrgChart(
+  profiles: Profile[],
+  isAdmin: boolean,
+  _currentUserId?: string,
+  focusedProfileIds?: Set<string> | null,
+) {
   const { nodes, edges } = useMemo(() => {
-    if (!profiles || profiles.length === 0) {
-      return { nodes: [], edges: [] }
-    }
+    if (!profiles || profiles.length === 0) return { nodes: [], edges: [] }
 
-    // Filter profiles based on permissions
-    let visibleProfiles = profiles
-    if (!isAdmin && currentUserId) {
-      // For non-admin users, show only their branch
-      // This is already filtered by the backend, but we keep this for clarity
-      visibleProfiles = profiles
-    }
+    const profileIds = new Set(profiles.map((p) => p.id))
 
-    // Create a set of visible profile IDs for quick lookup
-    const visibleProfileIds = new Set(visibleProfiles.map((p) => p.id))
-
-    // Create nodes
-    const nodes: Node[] = visibleProfiles.map((profile) => ({
+    const nodes: Node[] = profiles.map((profile) => ({
       id: profile.id,
       type: 'employee',
       data: { profile },
-      position: { x: 0, y: 0 }, // Will be calculated by dagre
+      position: { x: 0, y: 0 },
     }))
 
-    // Create edges (connections between manager and reports)
-    // Only create edges where both the manager and employee are in the visible set
-    const edges: Edge[] = visibleProfiles
-      .filter((profile) => profile.manager_id && visibleProfileIds.has(profile.manager_id))
-      .map((profile) => ({
-        id: `${profile.manager_id}-${profile.id}`,
-        source: profile.manager_id!,
-        target: profile.id,
+    const edges: Edge[] = profiles
+      .filter((p) => p.manager_id && profileIds.has(p.manager_id))
+      .map((p) => ({
+        id: `${p.manager_id}-${p.id}`,
+        source: p.manager_id!,
+        target: p.id,
         type: 'smoothstep',
         animated: false,
         style: { stroke: '#94a3b8', strokeWidth: 2 },
       }))
 
     return { nodes, edges }
-  }, [profiles, isAdmin, currentUserId])
+  }, [profiles])
 
-  // Apply hierarchical layout using dagre
   const layoutedNodes = useMemo(() => {
     if (nodes.length === 0) return nodes
 
-    const dagreGraph = new dagre.graphlib.Graph()
-    dagreGraph.setDefaultEdgeLabel(() => ({}))
-    // Node dimensions must match the rendered EmployeeNode size
-    const NODE_WIDTH = 220
-    const NODE_HEIGHT = 240 // 150px photo + ~90px content
+    const hasFocus =
+      focusedProfileIds &&
+      focusedProfileIds.size > 0 &&
+      focusedProfileIds.size < profiles.length
 
-    dagreGraph.setGraph({ 
-      rankdir: 'TB',
-      nodesep: 60,  // horizontal gap between sibling cards
-      ranksep: 80,  // vertical gap between ranks
-    })
+    if (!hasFocus) {
+      // Single full layout
+      const positions = runDagreLayout(profiles, edges)
+      return nodes.map((node) => ({
+        ...node,
+        position: positions.get(node.id) ?? { x: 0, y: 0 },
+      }))
+    }
 
-    // Add nodes to dagre
-    nodes.forEach((node) => {
-      dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT })
-    })
+    // ── Dual-pass layout ──────────────────────────────────────────────────────
+    // Pass 1: compact layout for just the focused (department-filtered) profiles
+    const focusedProfiles = profiles.filter((p) => focusedProfileIds.has(p.id))
 
-    // Add edges to dagre
-    edges.forEach((edge) => {
-      dagreGraph.setEdge(edge.source, edge.target)
-    })
+    const focusedPositions = runDagreLayout(focusedProfiles, edges)
+    const focusedBounds = getBounds(focusedPositions)
 
-    // Calculate layout
-    dagre.layout(dagreGraph)
+    // Pass 2: full layout for background nodes — scaled down and placed below
+    const fullPositions = runDagreLayout(profiles, edges)
+    const fullBounds = getBounds(fullPositions)
 
-    // Apply calculated positions to nodes (dagre returns center coords, ReactFlow uses top-left)
+    // Scale background to be a subtle "map" below the focused cluster
+    const BG_SCALE = 0.45
+    const BG_GAP = 280 // vertical gap between focused cluster and background
+
+    const bgOffsetY = focusedBounds.maxY + BG_GAP
+    // Center the scaled background under the focused cluster
+    const focusedCenterX = focusedBounds.minX + focusedBounds.width / 2
+    const bgOffsetX = focusedCenterX - (fullBounds.width * BG_SCALE) / 2 - fullBounds.minX * BG_SCALE
+
     return nodes.map((node) => {
-      const nodeWithPosition = dagreGraph.node(node.id)
+      if (focusedProfileIds.has(node.id)) {
+        return { ...node, position: focusedPositions.get(node.id) ?? { x: 0, y: 0 } }
+      }
+      // Background node: scaled full-layout position
+      const fullPos = fullPositions.get(node.id) ?? { x: 0, y: 0 }
       return {
         ...node,
         position: {
-          x: nodeWithPosition.x - NODE_WIDTH / 2,
-          y: nodeWithPosition.y - NODE_HEIGHT / 2,
+          x: bgOffsetX + fullPos.x * BG_SCALE,
+          y: bgOffsetY + (fullPos.y - fullBounds.minY) * BG_SCALE,
         },
       }
     })
-  }, [nodes, edges])
+  }, [nodes, edges, profiles, focusedProfileIds])
+
+  // isAdmin is kept in signature for potential future use
+  void isAdmin
 
   return { nodes: layoutedNodes, edges }
 }
