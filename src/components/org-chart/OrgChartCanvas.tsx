@@ -15,9 +15,9 @@ import 'reactflow/dist/style.css'
 import { EmployeeNode } from './EmployeeNode'
 import type { Profile, Department, OrgChartPosition } from '../../types'
 import { useOrgChart } from '../../hooks/useOrgChart'
-import { useUpdatePosition, getDepartmentDescendantIds, useClearAllPositions } from '../../lib/queries'
+import { useUpdatePosition, getDepartmentDescendantIds, useClearAllPositions, useBatchSavePositions } from '../../lib/queries'
 import { Button } from '../ui/button'
-import { RotateCcw, Loader2 } from 'lucide-react'
+import { Save, Loader2 } from 'lucide-react'
 
 interface OrgChartCanvasProps {
   profiles: Profile[]
@@ -66,6 +66,7 @@ function OrgChartCanvasInner({
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const updatePosition = useUpdatePosition()
   const clearAllPositions = useClearAllPositions()
+  const batchSavePositions = useBatchSavePositions()
   const { fitView } = useReactFlow()
 
   // Keep a ref to current nodes so fitView effects don't need nodes in their dep arrays
@@ -273,12 +274,25 @@ function OrgChartCanvasInner({
     [onNodeClick]
   )
 
-  const handleResetLayout = useCallback(async () => {
-    if (window.confirm('Reset all node positions to default layout? This cannot be undone.')) {
-      await clearAllPositions.mutateAsync()
-      // The positions will be cleared and the component will re-render with fresh dagre layout
+  const handleSaveCleanLayout = useCallback(async () => {
+    if (window.confirm('Save current clean layout? This will clear old positions and save the current dagre layout as the new baseline.')) {
+      try {
+        // First clear all existing positions
+        await clearAllPositions.mutateAsync()
+        
+        // Then save all current node positions (which are now fresh from dagre)
+        const positions = nodesRef.current.map((node) => ({
+          profile_id: node.id,
+          x_position: node.position.x,
+          y_position: node.position.y,
+        }))
+        
+        await batchSavePositions.mutateAsync(positions)
+      } catch (error) {
+        console.error('Failed to save clean layout:', error)
+      }
     }
-  }, [clearAllPositions])
+  }, [clearAllPositions, batchSavePositions])
 
   return (
     <div className="w-full h-full">
@@ -306,18 +320,18 @@ function OrgChartCanvasInner({
         {isAdmin && (
           <Panel position="top-left" className="bg-white rounded-lg shadow-md p-2 m-2">
             <Button
-              onClick={handleResetLayout}
+              onClick={handleSaveCleanLayout}
               variant="outline"
               size="sm"
-              disabled={clearAllPositions.isPending}
+              disabled={clearAllPositions.isPending || batchSavePositions.isPending}
               className="flex items-center gap-2"
             >
-              {clearAllPositions.isPending ? (
+              {(clearAllPositions.isPending || batchSavePositions.isPending) ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <RotateCcw className="h-4 w-4" />
+                <Save className="h-4 w-4" />
               )}
-              Reset Layout
+              Save Clean Layout
             </Button>
           </Panel>
         )}

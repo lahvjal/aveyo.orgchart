@@ -170,6 +170,36 @@ export function useUpdatePosition() {
   })
 }
 
+export function useBatchSavePositions() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (positions: Array<{ profile_id: string; x_position: number; y_position: number }>) => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      // Batch upsert all positions
+      const positionsWithUser = positions.map(pos => ({
+        profile_id: pos.profile_id,
+        x_position: pos.x_position,
+        y_position: pos.y_position,
+        updated_by: user.id,
+      }))
+
+      const { data, error } = await supabase
+        .from('org_chart_positions')
+        .upsert(positionsWithUser as any)
+        .select()
+
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-chart-positions'] })
+    },
+  })
+}
+
 export function useClearAllPositions() {
   const queryClient = useQueryClient()
 
