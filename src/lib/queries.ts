@@ -170,6 +170,27 @@ export function useUpdatePosition() {
   })
 }
 
+export function useClearAllPositions() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const { error } = await supabase
+        .from('org_chart_positions')
+        .delete()
+        .neq('profile_id', '00000000-0000-0000-0000-000000000000') // Delete all records
+
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['org-chart-positions'] })
+    },
+  })
+}
+
 // Share Links
 export function useShareLinks() {
   return useQuery({

@@ -61,8 +61,10 @@ export function useOrgChart(
 
     dagreGraph.setGraph({ 
       rankdir: 'TB',
-      nodesep: 60,  // horizontal gap between sibling cards
-      ranksep: 80,  // vertical gap between ranks
+      nodesep: 100,  // horizontal gap between sibling cards (increased from 60)
+      ranksep: 120,  // vertical gap between ranks (increased from 80)
+      marginx: 50,   // margin around the graph
+      marginy: 50,
     })
 
     // Add nodes to dagre

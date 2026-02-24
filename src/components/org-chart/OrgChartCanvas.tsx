@@ -8,13 +8,16 @@ import ReactFlow, {
   addEdge,
   useReactFlow,
   ReactFlowProvider,
+  Panel,
 } from 'reactflow'
 import type { NodeTypes, Connection } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { EmployeeNode } from './EmployeeNode'
 import type { Profile, Department, OrgChartPosition } from '../../types'
 import { useOrgChart } from '../../hooks/useOrgChart'
-import { useUpdatePosition, getDepartmentDescendantIds } from '../../lib/queries'
+import { useUpdatePosition, getDepartmentDescendantIds, useClearAllPositions } from '../../lib/queries'
+import { Button } from '../ui/button'
+import { RotateCcw, Loader2 } from 'lucide-react'
 
 interface OrgChartCanvasProps {
   profiles: Profile[]
@@ -62,6 +65,7 @@ function OrgChartCanvasInner({
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const updatePosition = useUpdatePosition()
+  const clearAllPositions = useClearAllPositions()
   const { fitView } = useReactFlow()
 
   // Keep a ref to current nodes so fitView effects don't need nodes in their dep arrays
@@ -75,7 +79,7 @@ function OrgChartCanvasInner({
   const dragStartPositions = useRef<Record<string, { x: number; y: number }>>({})
 
   // Constants for grid snapping
-  const SLOT_WIDTH = 280 // 220px node width + 60px gap (matches dagre nodesep)
+  const SLOT_WIDTH = 320 // 220px node width + 100px gap (matches dagre nodesep)
 
   // Update nodes when profiles change
   useEffect(() => {
@@ -269,6 +273,13 @@ function OrgChartCanvasInner({
     [onNodeClick]
   )
 
+  const handleResetLayout = useCallback(async () => {
+    if (window.confirm('Reset all node positions to default layout? This cannot be undone.')) {
+      await clearAllPositions.mutateAsync()
+      // The positions will be cleared and the component will re-render with fresh dagre layout
+    }
+  }, [clearAllPositions])
+
   return (
     <div className="w-full h-full">
       <ReactFlow
@@ -292,6 +303,24 @@ function OrgChartCanvasInner({
       >
         <Background />
         <Controls />
+        {isAdmin && (
+          <Panel position="top-left" className="bg-white rounded-lg shadow-md p-2 m-2">
+            <Button
+              onClick={handleResetLayout}
+              variant="outline"
+              size="sm"
+              disabled={clearAllPositions.isPending}
+              className="flex items-center gap-2"
+            >
+              {clearAllPositions.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              Reset Layout
+            </Button>
+          </Panel>
+        )}
         {!isMobile && (
           <MiniMap 
             nodeColor={(node: any) => {
