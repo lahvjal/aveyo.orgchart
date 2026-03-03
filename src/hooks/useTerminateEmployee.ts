@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { invokeAdminUserOps } from '../lib/adminUserOps'
 
 export interface TerminateEmployeeInput {
   targetUserId: string
@@ -30,19 +31,31 @@ export function useTerminateEmployee() {
       }
 
       try {
-        const { data, error } = await supabase.functions.invoke('admin-user-ops', {
-          body: {
-            action: 'terminateEmployee',
-            userId: currentUser.id,
-            targetUserId: input.targetUserId,
-            successorManagerId: input.successorManagerId,
-            terminationReason: input.terminationReason ?? null,
-            terminationEffectiveAt: input.terminationEffectiveAt ?? null,
-          },
+        const { data, error } = await invokeAdminUserOps({
+          action: 'terminateEmployee',
+          userId: currentUser.id,
+          targetUserId: input.targetUserId,
+          successorManagerId: input.successorManagerId,
+          terminationReason: input.terminationReason ?? null,
+          terminationEffectiveAt: input.terminationEffectiveAt ?? null,
         })
 
         if (error || !data?.success) {
-          const errMsg = data?.error || error?.message || 'Failed to terminate employee'
+          let errMsg = data?.error || error?.message || 'Failed to terminate employee'
+
+          // For non-2xx function responses, Supabase puts the body in error.context.
+          if (error && !data) {
+            try {
+              const errBody = await (error as any).context?.json?.()
+              if (errBody?.error) {
+                const detail = errBody?.details ? ` (${errBody.details})` : ''
+                errMsg = `${errBody.error}${detail}`
+              }
+            } catch (_) {
+              // Keep fallback message.
+            }
+          }
+
           return { success: false, error: errMsg }
         }
 

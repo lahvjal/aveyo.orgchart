@@ -82,6 +82,8 @@ CREATE INDEX IF NOT EXISTS idx_employee_termination_events_successor_manager_id
 
 ALTER TABLE employee_termination_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Admins can view employee termination events" ON employee_termination_events;
+
 CREATE POLICY "Admins can view employee termination events"
   ON employee_termination_events FOR SELECT
   USING (
@@ -92,6 +94,8 @@ CREATE POLICY "Admins can view employee termination events"
         AND (profiles.is_admin = TRUE OR profiles.is_super_admin = TRUE)
     )
   );
+
+DROP POLICY IF EXISTS "System can insert employee termination events" ON employee_termination_events;
 
 CREATE POLICY "System can insert employee termination events"
   ON employee_termination_events FOR INSERT

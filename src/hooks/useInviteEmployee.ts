@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { sendEmployeeInvitationEmail } from '../lib/notifications'
+import { invokeAdminUserOps } from '../lib/adminUserOps'
 
 interface InviteEmployeeData {
   email: string
@@ -68,22 +69,17 @@ export function useInviteEmployee() {
 
         // Step 1: Create user account via edge function
         console.log('useInviteEmployee: Creating user account via edge function')
-        const { data: createData, error: createError } = await supabase.functions.invoke(
-          'admin-user-ops',
-          {
-            body: {
-              action: 'createUser',
-              userId: currentUser.id,
-              email: data.email,
-              emailConfirm: true,
-              userMetadata: {
-                full_name: fullName,
-                job_title: data.jobTitle,
-                start_date: data.startDate || new Date().toISOString().split('T')[0],
-              },
-            },
-          }
-        )
+        const { data: createData, error: createError } = await invokeAdminUserOps({
+          action: 'createUser',
+          userId: currentUser.id,
+          email: data.email,
+          emailConfirm: true,
+          userMetadata: {
+            full_name: fullName,
+            job_title: data.jobTitle,
+            start_date: data.startDate || new Date().toISOString().split('T')[0],
+          },
+        })
 
         if (createError || !createData?.success) {
           let errMsg = createData?.error || createError?.message || 'Failed to create user account'
@@ -111,20 +107,15 @@ export function useInviteEmployee() {
         // Step 1.5: Update profile with additional fields (manager, department)
         if (data.managerId || data.departmentId) {
           console.log('useInviteEmployee: Updating profile with manager/department')
-          const { data: updateData, error: updateError } = await supabase.functions.invoke(
-            'admin-user-ops',
-            {
-              body: {
-                action: 'updateProfile',
-                userId: currentUser.id,
-                targetUserId: newUserId,
-                profileData: {
-                  manager_id: data.managerId || null,
-                  department_id: data.departmentId || null,
-                },
-              },
-            }
-          )
+          const { data: updateData, error: updateError } = await invokeAdminUserOps({
+            action: 'updateProfile',
+            userId: currentUser.id,
+            targetUserId: newUserId,
+            profileData: {
+              manager_id: data.managerId || null,
+              department_id: data.departmentId || null,
+            },
+          })
 
           if (updateError || !updateData?.success) {
             console.warn('useInviteEmployee: Failed to update manager/department:', updateData?.error || updateError)
@@ -135,18 +126,13 @@ export function useInviteEmployee() {
         // Step 2: Generate magic link via edge function
         console.log('useInviteEmployee: Generating magic link')
         const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
-        const { data: linkData, error: linkError } = await supabase.functions.invoke(
-          'admin-user-ops',
-          {
-            body: {
-              action: 'generateLink',
-              userId: currentUser.id,
-              email: data.email,
-              linkType: 'magiclink',
-              redirectTo: `${appUrl}/onboarding`,
-            },
-          }
-        )
+        const { data: linkData, error: linkError } = await invokeAdminUserOps({
+          action: 'generateLink',
+          userId: currentUser.id,
+          email: data.email,
+          linkType: 'magiclink',
+          redirectTo: `${appUrl}/onboarding`,
+        })
 
         if (linkError || !linkData?.success || !linkData?.actionLink) {
           let linkErrMsg = linkData?.error || 'User created but failed to generate invitation link'

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { sendEmployeeInvitationEmail } from '../lib/notifications'
+import { invokeAdminUserOps } from '../lib/adminUserOps'
 import type { Profile } from '../types'
 
 interface ResendInviteResult {
@@ -39,16 +40,13 @@ export function useResendInvite() {
         console.log('useResendInvite: Generating new magic link')
         const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
 
-        const { data: linkData, error: linkError } = await supabase.functions.invoke(
-          'admin-user-ops',
+        const { data: linkData, error: linkError } = await invokeAdminUserOps(
           {
-            body: {
-              action: 'generateLink',
-              userId: currentUser.id,
-              email: profile.email,
-              linkType: 'magiclink',
-              redirectTo: `${appUrl}/onboarding`,
-            },
+            action: 'generateLink',
+            userId: currentUser.id,
+            email: profile.email,
+            linkType: 'magiclink',
+            redirectTo: `${appUrl}/onboarding`,
           }
         )
 
@@ -109,8 +107,9 @@ export function useUserAuthStatus() {
       }
 
       try {
-        const { data, error } = await supabase.functions.invoke('admin-user-ops', {
-          body: { action: 'listUsers', userId: currentUser.id },
+        const { data, error } = await invokeAdminUserOps({
+          action: 'listUsers',
+          userId: currentUser.id,
         })
 
         if (error || !data?.success) {

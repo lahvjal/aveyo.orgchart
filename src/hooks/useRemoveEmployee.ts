@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
+import { invokeAdminUserOps } from '../lib/adminUserOps'
 
 interface RemoveEmployeeResult {
   success: boolean
@@ -33,12 +34,10 @@ export function useRemoveEmployee() {
       }
 
       try {
-        const { data, error } = await supabase.functions.invoke('admin-user-ops', {
-          body: {
-            action: 'deleteUser',
-            userId: currentUser.id,
-            targetUserId: userId,
-          },
+        const { data, error } = await invokeAdminUserOps({
+          action: 'deleteUser',
+          userId: currentUser.id,
+          targetUserId: userId,
         })
 
         if (error || !data?.success) {

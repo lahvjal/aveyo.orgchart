@@ -35,13 +35,40 @@ serve(async (req) => {
 
   try {
     const body = await req.json()
-    const { action, userId } = body
+    const { action, userId: claimedUserId } = body
 
-    if (!action || !userId) {
-      return jsonResponse({ error: 'action and userId are required' }, 400)
+    if (!action) {
+      return jsonResponse({ error: 'action is required' }, 400)
     }
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+    const authHeader = req.headers.get('authorization') ?? ''
+    const bearerPrefix = 'bearer '
+    const lowerAuthHeader = authHeader.toLowerCase()
+    if (!lowerAuthHeader.startsWith(bearerPrefix)) {
+      return jsonResponse({ code: 401, message: 'Invalid JWT' }, 401)
+    }
+
+    const accessToken = authHeader.slice(bearerPrefix.length).trim()
+    if (!accessToken) {
+      return jsonResponse({ code: 401, message: 'Invalid JWT' }, 401)
+    }
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(accessToken)
+    if (authError || !authData?.user) {
+      console.error('admin-user-ops: bearer token verification failed', authError)
+      return jsonResponse({ code: 401, message: 'Invalid JWT' }, 401)
+    }
+
+    const userId = authData.user.id
+    if (claimedUserId && claimedUserId !== userId) {
+      console.error('admin-user-ops: requester mismatch', {
+        claimedUserId,
+        tokenUserId: userId,
+      })
+      return jsonResponse({ error: 'Requester mismatch' }, 403)
+    }
 
     // Verify the requesting user exists and has the required permission
     const { data: requesterProfile, error: profileError } = await supabaseAdmin
@@ -160,7 +187,14 @@ serve(async (req) => {
 
       if (error) {
         console.error('admin-user-ops terminateEmployee error:', error)
-        return jsonResponse({ error: error.message }, 400)
+        return jsonResponse(
+          {
+            error: error.message,
+            details: error.details ?? null,
+            hint: error.hint ?? null,
+          },
+          400
+        )
       }
 
       const result = Array.isArray(data) ? data[0] : null

@@ -5,6 +5,8 @@
 
 GRANT SELECT ON organization_settings TO anon;
 
+DROP POLICY IF EXISTS "anon_read_organization_settings" ON organization_settings;
+
 CREATE POLICY "anon_read_organization_settings"
   ON organization_settings FOR SELECT
   TO anon
