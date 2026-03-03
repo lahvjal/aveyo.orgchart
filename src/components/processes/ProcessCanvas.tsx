@@ -13,30 +13,106 @@ import ReactFlow, {
 import type { NodeTypes, EdgeTypes, Connection, Edge, Node, ReactFlowInstance } from 'reactflow'
 import { useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../../lib/supabase'
-import { Undo2, Redo2 } from 'lucide-react'
+import { Undo2, Redo2, Save, Loader2 } from 'lucide-react'
 import 'reactflow/dist/style.css'
 import { ProcessNode } from './ProcessNode'
 import type { ProcessNodeData } from './ProcessNode'
 import { ProcessEdge } from './ProcessEdge'
 import { ProcessNodePalette } from './ProcessNodePalette'
 import { ProcessCanvasContext } from './ProcessCanvasContext'
-import type { ProcessNodeType } from '../../types/processes'
-import {
-  useProcessNodes,
-  useProcessEdges,
-  useCreateProcessNode,
-  useUpdateProcessNode,
-  useDeleteProcessNode,
-  useCreateProcessEdge,
-  useUpdateProcessEdge,
-  useDeleteProcessEdge,
-} from '../../hooks/useProcesses'
+import type { ProcessNodeType, ProcessNode as ProcessNodeRecord, ProcessEdge as ProcessEdgeRecord } from '../../types/processes'
+import { useProcessNodes, useProcessEdges } from '../../hooks/useProcesses'
+import { useProcessRealtime } from '../../hooks/useProcessRealtime'
 import { useProfiles } from '../../hooks/useProfile'
 import { useDepartments } from '../../lib/queries'
+import type { Database } from '../../types/database'
 
 // Defined outside component so ReactFlow never sees new object references
 const nodeTypes: NodeTypes = { process: ProcessNode }
 const edgeTypes: EdgeTypes = { process: ProcessEdge }
+const AUTO_SAVE_MS = 15000
+
+type ProcessNodeInsert = Database['public']['Tables']['process_nodes']['Insert']
+type ProcessEdgeInsert = Database['public']['Tables']['process_edges']['Insert']
+
+function toFlowNodes(dbNodes: ProcessNodeRecord[]): Node<ProcessNodeData>[] {
+  return dbNodes.map((n) => ({
+    id: n.id,
+    type: 'process',
+    position: { x: n.x_position, y: n.y_position },
+    data: {
+      nodeType: n.node_type,
+      label: n.label,
+      description: n.description ?? '',
+      taggedProfileIds: n.tagged_profile_ids ?? [],
+      taggedDepartmentIds: n.tagged_department_ids ?? [],
+    },
+  }))
+}
+
+function toFlowEdges(dbEdges: ProcessEdgeRecord[], canEdit: boolean): Edge[] {
+  return dbEdges.map((e) => ({
+    id: e.id,
+    source: e.source_node_id,
+    target: e.target_node_id,
+    label: e.label ?? undefined,
+    type: 'process',
+    data: {
+      canEdit,
+      waypoints: e.waypoints ?? [],
+      srcSide: e.source_side ?? null,
+      tgtSide: e.target_side ?? null,
+    },
+  }))
+}
+
+function graphSignature(
+  nodes: Node<ProcessNodeData>[],
+  edges: Edge[],
+): string {
+  const nodeSig = [...nodes]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((n) => ({
+      id: n.id,
+      x: n.position.x,
+      y: n.position.y,
+      t: n.data.nodeType,
+      l: n.data.label,
+      d: n.data.description ?? '',
+      p: [...n.data.taggedProfileIds].sort(),
+      dep: [...n.data.taggedDepartmentIds].sort(),
+    }))
+  const edgeSig = [...edges]
+    .sort((a, b) => a.id.localeCompare(b.id))
+    .map((e) => ({
+      id: e.id,
+      s: e.source,
+      t: e.target,
+      l: e.label ?? '',
+      w: e.data?.waypoints ?? [],
+      ss: e.data?.srcSide ?? null,
+      ts: e.data?.tgtSide ?? null,
+    }))
+  return JSON.stringify({ nodeSig, edgeSig })
+}
+
+function normalizeEdgeLabel(label: Edge['label']): string | null {
+  if (typeof label === 'string') return label
+  if (label == null) return null
+  return String(label)
+}
+
+function normalizeEdgeWaypoints(edge: Edge): Database['public']['Tables']['process_edges']['Insert']['waypoints'] {
+  const candidate = edge.data?.waypoints
+  return Array.isArray(candidate) ? (candidate as Database['public']['Tables']['process_edges']['Insert']['waypoints']) : null
+}
+
+function createLocalId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  return `tmp-${Date.now()}-${Math.random().toString(16).slice(2)}`
+}
 
 // ── Side-detection helpers (module-level, no closures needed) ────────────────
 
@@ -87,35 +163,25 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   const { data: allDepartments = [] } = useDepartments({ enabled: !isPublic })
   const isLoading = nodesLoading || edgesLoading
 
-  const createNode = useCreateProcessNode()
-  const updateNode = useUpdateProcessNode()
-  const deleteNode = useDeleteProcessNode()
-  const createEdge = useCreateProcessEdge()
-  const updateEdge = useUpdateProcessEdge()
-  const deleteEdge = useDeleteProcessEdge()
-
-  // Mutation objects in refs — their unstable identity never enters useCallback deps
-  const updateNodeRef = useRef(updateNode)
-  const deleteNodeRef = useRef(deleteNode)
-  const createEdgeRef = useRef(createEdge)
-  const updateEdgeRef = useRef(updateEdge)
-  const deleteEdgeRef = useRef(deleteEdge)
-  const createNodeRef = useRef(createNode)
-  updateNodeRef.current = updateNode
-  deleteNodeRef.current = deleteNode
-  createEdgeRef.current = createEdge
-  updateEdgeRef.current = updateEdge
-  deleteEdgeRef.current = deleteEdge
-  createNodeRef.current = createNode
-
   const queryClient = useQueryClient()
 
   const [nodes, setNodes, onNodesChange] = useNodesState<ProcessNodeData>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const { fitView, screenToFlowPosition, getNode } = useReactFlow()
-  const hasInitialized = useRef(false)
+  const hasHydratedRef = useRef(false)
+  const lastRemoteSignatureRef = useRef<string | null>(null)
+  const pendingRemoteSnapshotRef = useRef<{ nodes: Node<ProcessNodeData>[]; edges: Edge[] } | null>(null)
   const reactFlowWrapper = useRef<HTMLDivElement>(null)
   const [rfInstance, setRfInstance] = useState<ReactFlowInstance | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [hasPendingRemoteChanges, setHasPendingRemoteChanges] = useState(false)
+  const isSavingRef = useRef(false)
+  const isDirtyRef = useRef(false)
+  const editVersionRef = useRef(0)
+  const deletingNodeIdsRef = useRef<Set<string>>(new Set())
   // Track last pointer position so onConnect / onReconnect can compute the
   // target side when the edge is dropped on the full-node 'node-body' handle.
   const lastPointerRef = useRef({ x: 0, y: 0 })
@@ -133,6 +199,36 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   const [canUndo, setCanUndo] = useState(false)
   const [canRedo, setCanRedo] = useState(false)
 
+  const applySnapshotToCanvas = useCallback((
+    snapshot: HistoryEntry,
+    {
+      resetHistory = false,
+      clearDirty = false,
+      setAsLastRemote = false,
+    }: { resetHistory?: boolean; clearDirty?: boolean; setAsLastRemote?: boolean } = {},
+  ) => {
+    setNodes(snapshot.nodes)
+    setEdges(snapshot.edges)
+
+    if (resetHistory) {
+      historyRef.current = [snapshot]
+      historyIndexRef.current = 0
+      setCanUndo(false)
+      setCanRedo(false)
+    }
+
+    if (clearDirty) {
+      editVersionRef.current = 0
+      isDirtyRef.current = false
+      setHasUnsavedChanges(false)
+      setSaveError(null)
+    }
+
+    if (setAsLastRemote) {
+      lastRemoteSignatureRef.current = graphSignature(snapshot.nodes, snapshot.edges)
+    }
+  }, [setNodes, setEdges])
+
   /** Push a snapshot onto the history stack (max 20 undoable steps). */
   const pushToHistory = useCallback((newNodes: Node<ProcessNodeData>[], newEdges: Edge[]) => {
     if (!canEdit) return
@@ -148,85 +244,168 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
     setCanRedo(false)
   }, [canEdit])
 
-  /**
-   * Reconcile the canvas state with the DB after an undo/redo step.
-   * Order matters due to FK constraints:
-   *   delete edges → delete nodes → upsert nodes → upsert edges
-   */
-  const reconcileToDb = useCallback(async (
-    target: HistoryEntry,
-    from: HistoryEntry,
-  ) => {
-    const targetNodeIds = new Set(target.nodes.map(n => n.id))
-    const targetEdgeIds = new Set(target.edges.map(e => e.id))
+  const markDirty = useCallback(() => {
+    if (!canEdit) return
+    editVersionRef.current += 1
+    isDirtyRef.current = true
+    setHasUnsavedChanges(true)
+    setSaveError(null)
+  }, [canEdit])
 
-    // 1. Delete edges not in target (FK: edges reference nodes)
-    const edgesToDel = from.edges.filter(e => !targetEdgeIds.has(e.id))
-    if (edgesToDel.length) {
-      await Promise.all(edgesToDel.map(e =>
-        (supabase as any).from('process_edges').delete().eq('id', e.id)
-      ))
-    }
-    // 2. Delete nodes not in target
-    const nodesToDel = from.nodes.filter(n => !targetNodeIds.has(n.id))
-    if (nodesToDel.length) {
-      await Promise.all(nodesToDel.map(n =>
-        (supabase as any).from('process_nodes').delete().eq('id', n.id)
-      ))
-    }
-    // 3. Upsert target nodes first (edges need them to exist)
-    if (target.nodes.length) {
-      await Promise.all(target.nodes.map(n =>
-        (supabase as any).from('process_nodes').upsert({
-          id: n.id, process_id: processId,
-          node_type: n.data.nodeType, label: n.data.label,
-          description: n.data.description || null,
-          x_position: n.position.x, y_position: n.position.y,
-          tagged_profile_ids: n.data.taggedProfileIds,
-          tagged_department_ids: n.data.taggedDepartmentIds,
-        })
-      ))
-    }
-    // 4. Upsert target edges
-    if (target.edges.length) {
-      await Promise.all(target.edges.map(e =>
-        (supabase as any).from('process_edges').upsert({
-          id: e.id, process_id: processId,
-          source_node_id: e.source, target_node_id: e.target,
-          label: e.label || null,
-          waypoints: e.data?.waypoints || null,
-          source_side: e.data?.srcSide || null,
-          target_side: e.data?.tgtSide || null,
-        })
-      ))
-    }
+  const onRealtimeGraphMutation = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['process-nodes', processId] })
     queryClient.invalidateQueries({ queryKey: ['process-edges', processId] })
   }, [processId, queryClient])
 
-  const undo = useCallback(async () => {
+  useProcessRealtime({
+    processId,
+    onGraphMutation: onRealtimeGraphMutation,
+  })
+
+  const persistGraphSnapshot = useCallback(async (
+    snapshotNodes: Node<ProcessNodeData>[],
+    snapshotEdges: Edge[],
+  ) => {
+    const [{ data: dbNodeRows, error: dbNodeErr }, { data: dbEdgeRows, error: dbEdgeErr }] = await Promise.all([
+      supabase
+        .from('process_nodes')
+        .select('id')
+        .eq('process_id', processId),
+      supabase
+        .from('process_edges')
+        .select('id')
+        .eq('process_id', processId),
+    ])
+    if (dbNodeErr) throw dbNodeErr
+    if (dbEdgeErr) throw dbEdgeErr
+
+    const localNodeIds = new Set(snapshotNodes.map((n) => n.id))
+    const localEdgeIds = new Set(snapshotEdges.map((e) => e.id))
+    const nodeIdsToDelete = ((dbNodeRows ?? []) as { id: string }[])
+      .map((n) => n.id)
+      .filter((id) => !localNodeIds.has(id))
+    const edgeIdsToDelete = ((dbEdgeRows ?? []) as { id: string }[])
+      .map((e) => e.id)
+      .filter((id) => !localEdgeIds.has(id))
+
+    if (edgeIdsToDelete.length > 0) {
+      const { error } = await supabase.from('process_edges').delete().in('id', edgeIdsToDelete)
+      if (error) throw error
+    }
+    if (nodeIdsToDelete.length > 0) {
+      const { error } = await supabase.from('process_nodes').delete().in('id', nodeIdsToDelete)
+      if (error) throw error
+    }
+
+    if (snapshotNodes.length > 0) {
+      const nodeRows: ProcessNodeInsert[] = snapshotNodes.map((n) => ({
+        id: n.id,
+        process_id: processId,
+        node_type: n.data.nodeType,
+        label: n.data.label,
+        description: n.data.description || null,
+        x_position: n.position.x,
+        y_position: n.position.y,
+        tagged_profile_ids: n.data.taggedProfileIds,
+        tagged_department_ids: n.data.taggedDepartmentIds,
+      }))
+      const { error } = await supabase
+        .from('process_nodes')
+        .upsert(nodeRows, { onConflict: 'id' })
+      if (error) throw error
+    }
+
+    if (snapshotEdges.length > 0) {
+      const edgeRowsWithSides: ProcessEdgeInsert[] = snapshotEdges.map((e) => ({
+        id: e.id,
+        process_id: processId,
+        source_node_id: e.source,
+        target_node_id: e.target,
+        label: normalizeEdgeLabel(e.label),
+        waypoints: normalizeEdgeWaypoints(e),
+        source_side: e.data?.srcSide || null,
+        target_side: e.data?.tgtSide || null,
+      }))
+      let { error: edgeErr } = await supabase
+        .from('process_edges')
+        .upsert(edgeRowsWithSides, { onConflict: 'id' })
+
+      if (edgeErr) {
+        const edgeRowsBase: ProcessEdgeInsert[] = snapshotEdges.map((e) => ({
+          id: e.id,
+          process_id: processId,
+          source_node_id: e.source,
+          target_node_id: e.target,
+          label: normalizeEdgeLabel(e.label),
+          waypoints: normalizeEdgeWaypoints(e),
+        }))
+        const retry = await supabase
+          .from('process_edges')
+          .upsert(edgeRowsBase, { onConflict: 'id' })
+        edgeErr = retry.error
+      }
+
+      if (edgeErr) throw edgeErr
+    }
+
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['process-nodes', processId] }),
+      queryClient.invalidateQueries({ queryKey: ['process-edges', processId] }),
+    ])
+  }, [processId, queryClient])
+
+  const saveChanges = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
+    if (!canEdit && !force) return
+    if (isSavingRef.current) return
+    if (!force && !isDirtyRef.current) return
+
+    const versionAtStart = editVersionRef.current
+    isSavingRef.current = true
+    setIsSaving(true)
+    setSaveError(null)
+
+    try {
+      const snapshotNodes = nodesRef.current.map((n) => ({ ...n, data: { ...n.data } }))
+      const snapshotEdges = edgesRef.current.map((e) => ({ ...e, data: { ...e.data } }))
+      await persistGraphSnapshot(snapshotNodes, snapshotEdges)
+      const hasConcurrentEdits = editVersionRef.current !== versionAtStart
+      isDirtyRef.current = hasConcurrentEdits
+      setHasUnsavedChanges(hasConcurrentEdits)
+      setLastSavedAt(new Date())
+    } catch (err) {
+      const saveMsg =
+        err instanceof Error
+          ? err.message
+          : 'Unable to save process updates right now.'
+      setSaveError(saveMsg)
+      console.error('Process save failed', { err, processId })
+    } finally {
+      isSavingRef.current = false
+      setIsSaving(false)
+    }
+  }, [canEdit, persistGraphSnapshot, processId])
+
+  const undo = useCallback(() => {
     if (!canEdit || historyIndexRef.current <= 0) return
-    const from = historyRef.current[historyIndexRef.current]
     historyIndexRef.current--
     const target = historyRef.current[historyIndexRef.current]
     setNodes(target.nodes)
     setEdges(target.edges)
     setCanUndo(historyIndexRef.current > 0)
     setCanRedo(true)
-    reconcileToDb(target, from)
-  }, [canEdit, setNodes, setEdges, reconcileToDb])
+    markDirty()
+  }, [canEdit, setNodes, setEdges, markDirty])
 
-  const redo = useCallback(async () => {
+  const redo = useCallback(() => {
     if (!canEdit || historyIndexRef.current >= historyRef.current.length - 1) return
-    const from = historyRef.current[historyIndexRef.current]
     historyIndexRef.current++
     const target = historyRef.current[historyIndexRef.current]
     setNodes(target.nodes)
     setEdges(target.edges)
     setCanUndo(true)
     setCanRedo(historyIndexRef.current < historyRef.current.length - 1)
-    reconcileToDb(target, from)
-  }, [canEdit, setNodes, setEdges, reconcileToDb])
+    markDirty()
+  }, [canEdit, setNodes, setEdges, markDirty])
 
   // Keyboard shortcuts: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z = redo
   useEffect(() => {
@@ -236,111 +415,150 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       if (!mod) return
       if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo() }
       else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo() }
+      else if (e.key === 's') { e.preventDefault(); void saveChanges({ force: true }) }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [canEdit, undo, redo])
+  }, [canEdit, undo, redo, saveChanges])
 
-  // Stable callbacks via mutation refs — safe in useCallback dep arrays
+  // Auto-save in the background so edits are not sent on every tiny interaction.
+  useEffect(() => {
+    if (!canEdit) return
+    const timer = window.setInterval(() => {
+      if (!isSavingRef.current && isDirtyRef.current) {
+        void saveChanges()
+      }
+    }, AUTO_SAVE_MS)
+    return () => window.clearInterval(timer)
+  }, [canEdit, saveChanges])
+
+  // Prompt before tab close if there are unsaved changes.
+  useEffect(() => {
+    if (!canEdit) return
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (!isDirtyRef.current) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', beforeUnload)
+    return () => window.removeEventListener('beforeunload', beforeUnload)
+  }, [canEdit])
+
+  // Best-effort flush when leaving edit mode.
+  const wasEditingRef = useRef(canEdit)
+  useEffect(() => {
+    if (wasEditingRef.current && !canEdit && isDirtyRef.current && !isSavingRef.current) {
+      void saveChanges({ force: true })
+    }
+    wasEditingRef.current = canEdit
+  }, [canEdit, saveChanges])
+
   const handleLabelChange = useCallback(
     (id: string, label: string) => {
-      updateNodeRef.current.mutate({ id, process_id: processId, label })
       const next = nodesRef.current.map((n) => n.id === id ? { ...n, data: { ...n.data, label } } : n)
       setNodes(next)
       pushToHistory(next, edgesRef.current)
+      markDirty()
     },
-    [processId, setNodes, pushToHistory]
+    [setNodes, pushToHistory, markDirty]
   )
 
   const handleDescriptionChange = useCallback(
     (id: string, description: string) => {
-      updateNodeRef.current.mutate({ id, process_id: processId, description })
       const next = nodesRef.current.map((n) => n.id === id ? { ...n, data: { ...n.data, description } } : n)
       setNodes(next)
       pushToHistory(next, edgesRef.current)
+      markDirty()
     },
-    [processId, setNodes, pushToHistory]
+    [setNodes, pushToHistory, markDirty]
   )
 
   const handleDeleteNode = useCallback(
     (id: string) => {
-      deleteNodeRef.current.mutate({ id, process_id: processId })
       const nextNodes = nodesRef.current.filter((n) => n.id !== id)
       const nextEdges = edgesRef.current.filter((e) => e.source !== id && e.target !== id)
       setNodes(nextNodes)
       setEdges(nextEdges)
       pushToHistory(nextNodes, nextEdges)
+      markDirty()
     },
-    [processId, setNodes, setEdges, pushToHistory]
+    [setNodes, setEdges, pushToHistory, markDirty]
   )
 
   const handleUpdateTaggedProfiles = useCallback(
     (nodeId: string, profileIds: string[]) => {
-      updateNodeRef.current.mutate({ id: nodeId, process_id: processId, tagged_profile_ids: profileIds })
       const next = nodesRef.current.map((n) => n.id === nodeId ? { ...n, data: { ...n.data, taggedProfileIds: profileIds } } : n)
       setNodes(next)
       pushToHistory(next, edgesRef.current)
+      markDirty()
     },
-    [processId, setNodes, pushToHistory]
+    [setNodes, pushToHistory, markDirty]
   )
 
   const handleUpdateTaggedDepartments = useCallback(
     (nodeId: string, departmentIds: string[]) => {
-      updateNodeRef.current.mutate({ id: nodeId, process_id: processId, tagged_department_ids: departmentIds })
       const next = nodesRef.current.map((n) => n.id === nodeId ? { ...n, data: { ...n.data, taggedDepartmentIds: departmentIds } } : n)
       setNodes(next)
       pushToHistory(next, edgesRef.current)
+      markDirty()
     },
-    [processId, setNodes, pushToHistory]
+    [setNodes, pushToHistory, markDirty]
   )
 
-  // One-time initialization from the database — ref guard prevents re-runs
-  // on subsequent ReactFlow-triggered re-renders.
+  // Reconcile query snapshots into the canvas:
+  // - first load hydrates canvas + history
+  // - clean local state applies remote updates immediately
+  // - dirty local state defers remote updates behind an explicit banner action
   useEffect(() => {
-    if (isLoading || hasInitialized.current) return
-    hasInitialized.current = true
+    if (isLoading) return
 
-    const rfNodes: Node<ProcessNodeData>[] = dbNodes.map((n) => ({
-      id: n.id,
-      type: 'process',
-      position: { x: n.x_position, y: n.y_position },
-      data: {
-        nodeType: n.node_type,
-        label: n.label,
-        description: n.description ?? '',
-        taggedProfileIds: n.tagged_profile_ids ?? [],
-        taggedDepartmentIds: n.tagged_department_ids ?? [],
-      },
-    }))
+    const incomingNodes = toFlowNodes(dbNodes)
+    const incomingEdges = toFlowEdges(dbEdges, canEdit)
+    const incomingSnapshot = { nodes: incomingNodes, edges: incomingEdges }
+    const incomingSignature = graphSignature(incomingNodes, incomingEdges)
+    const localSignature = graphSignature(nodesRef.current, edgesRef.current)
 
-    const rfEdges: Edge[] = dbEdges.map((e) => ({
-      id: e.id,
-      source: e.source_node_id,
-      target: e.target_node_id,
-      label: e.label ?? undefined,
-      type: 'process',
-      data: {
-        canEdit,
-        waypoints: e.waypoints ?? [],
-        srcSide: e.source_side ?? null,
-        tgtSide: e.target_side ?? null,
-      },
-    }))
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true
+      applySnapshotToCanvas(incomingSnapshot, { resetHistory: true, clearDirty: true, setAsLastRemote: true })
+      pendingRemoteSnapshotRef.current = null
+      setHasPendingRemoteChanges(false)
+      setLastSavedAt(new Date())
 
-    setNodes(rfNodes)
-    setEdges(rfEdges)
-
-    // Seed history with the initial loaded state
-    historyRef.current = [{ nodes: rfNodes, edges: rfEdges }]
-    historyIndexRef.current = 0
-    setCanUndo(false)
-    setCanRedo(false)
-
-    if (rfNodes.length > 0) {
-      setTimeout(() => fitView({ padding: 0.2, duration: 600 }), 150)
+      if (incomingNodes.length > 0) {
+        setTimeout(() => fitView({ padding: 0.2, duration: 600 }), 150)
+      }
+      return
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading])
+
+    if (incomingSignature === localSignature) {
+      lastRemoteSignatureRef.current = incomingSignature
+      pendingRemoteSnapshotRef.current = null
+      setHasPendingRemoteChanges(false)
+      return
+    }
+
+    if (isDirtyRef.current || isSavingRef.current) {
+      pendingRemoteSnapshotRef.current = incomingSnapshot
+      setHasPendingRemoteChanges(true)
+      return
+    }
+
+    applySnapshotToCanvas(incomingSnapshot, { resetHistory: true, clearDirty: true, setAsLastRemote: true })
+    pendingRemoteSnapshotRef.current = null
+    setHasPendingRemoteChanges(false)
+  }, [isLoading, dbNodes, dbEdges, canEdit, applySnapshotToCanvas, fitView])
+
+  const applyPendingRemoteSnapshot = useCallback(() => {
+    if (!pendingRemoteSnapshotRef.current) return
+    applySnapshotToCanvas(pendingRemoteSnapshotRef.current, {
+      resetHistory: true,
+      clearDirty: true,
+      setAsLastRemote: true,
+    })
+    pendingRemoteSnapshotRef.current = null
+    setHasPendingRemoteChanges(false)
+  }, [applySnapshotToCanvas])
 
   // Keep edge canEdit flag in sync when edit mode toggles.
   // Nodes no longer need updating here — they read canEdit from context.
@@ -363,27 +581,20 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       const tgtSide = sideFromHandleId(connection.targetHandle)
         ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null)
 
-      createEdgeRef.current.mutate(
+      const nextEdges = addEdge(
         {
-          process_id: processId,
-          source_node_id: connection.source,
-          target_node_id: connection.target,
-          source_side: srcSide,
-          target_side: tgtSide,
+          ...connection,
+          id: createLocalId(),
+          type: 'process',
+          data: { canEdit, waypoints: [], srcSide, tgtSide },
         },
-        {
-          onSuccess: (savedEdge) => {
-            const nextEdges = addEdge(
-              { ...connection, id: savedEdge.id, type: 'process', data: { canEdit, waypoints: [], srcSide, tgtSide } },
-              edgesRef.current.filter((e) => !(e.source === connection.source && e.target === connection.target))
-            )
-            setEdges(nextEdges)
-            pushToHistory(nodesRef.current, nextEdges)
-          },
-        }
+        edgesRef.current.filter((e) => !(e.source === connection.source && e.target === connection.target))
       )
+      setEdges(nextEdges)
+      pushToHistory(nodesRef.current, nextEdges)
+      markDirty()
     },
-    [canEdit, processId, setEdges, screenToFlowPosition, getNode, pushToHistory]
+    [canEdit, setEdges, screenToFlowPosition, getNode, pushToHistory, markDirty]
   )
 
   const onReconnect = useCallback(
@@ -411,45 +622,55 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       )
       setEdges(nextEdges)
       pushToHistory(nodesRef.current, nextEdges)
-
-      // Persist all changed fields (source/target nodes + sides + cleared waypoints)
-      updateEdgeRef.current.mutate({
-        id: oldEdge.id,
-        process_id: processId,
-        source_node_id: newConnection.source!,
-        target_node_id: newConnection.target!,
-        source_side: srcSide,
-        target_side: tgtSide,
-        waypoints: [],
-      })
+      markDirty()
     },
-    [canEdit, processId, setEdges, screenToFlowPosition, getNode, pushToHistory]
+    [canEdit, setEdges, screenToFlowPosition, getNode, pushToHistory, markDirty]
   )
 
   const onEdgesDelete = useCallback(
     (deletedEdges: Edge[]) => {
-      deletedEdges.forEach((e) => deleteEdgeRef.current.mutate({ id: e.id, process_id: processId }))
+      const isCascadeFromNodeDelete =
+        deletedEdges.length > 0 &&
+        deletedEdges.every((e) => deletingNodeIdsRef.current.has(e.source) || deletingNodeIdsRef.current.has(e.target))
+      if (isCascadeFromNodeDelete) return
+
       const deletedIds = new Set(deletedEdges.map(e => e.id))
       const nextEdges = edgesRef.current.filter(e => !deletedIds.has(e.id))
       pushToHistory(nodesRef.current, nextEdges)
+      markDirty()
     },
-    [processId, pushToHistory]
+    [pushToHistory, markDirty]
+  )
+
+  const onNodesDelete = useCallback(
+    (deletedNodes: Node[]) => {
+      const deletedNodeIds = new Set(deletedNodes.map((n) => n.id))
+      deletingNodeIdsRef.current = deletedNodeIds
+      setTimeout(() => {
+        deletingNodeIdsRef.current = new Set()
+      }, 0)
+
+      const nextNodes = nodesRef.current.filter((n) => !deletedNodeIds.has(n.id))
+      const nextEdges = edgesRef.current.filter(
+        (e) => !deletedNodeIds.has(e.source) && !deletedNodeIds.has(e.target)
+      )
+      setNodes(nextNodes)
+      setEdges(nextEdges)
+      pushToHistory(nextNodes, nextEdges)
+      markDirty()
+    },
+    [setNodes, setEdges, pushToHistory, markDirty]
   )
 
   const handleNodeDragStop = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    () => {
       if (canEdit) {
-        updateNodeRef.current.mutate({
-          id: node.id,
-          process_id: processId,
-          x_position: node.position.x,
-          y_position: node.position.y,
-        })
         // nodesRef.current already reflects the final drag position
         pushToHistory(nodesRef.current, edgesRef.current)
+        markDirty()
       }
     },
-    [canEdit, processId, pushToHistory]
+    [canEdit, pushToHistory, markDirty]
   )
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -466,37 +687,24 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       if (!nodeType) return
 
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
-
-      createNodeRef.current.mutate(
-        {
-          process_id: processId,
-          node_type: nodeType,
+      const newNode: Node<ProcessNodeData> = {
+        id: createLocalId(),
+        type: 'process',
+        position: { x: position.x, y: position.y },
+        data: {
+          nodeType,
           label: nodeType.charAt(0).toUpperCase() + nodeType.slice(1),
-          x_position: position.x,
-          y_position: position.y,
+          description: '',
+          taggedProfileIds: [],
+          taggedDepartmentIds: [],
         },
-        {
-          onSuccess: (savedNode) => {
-            const newNode: Node<ProcessNodeData> = {
-              id: savedNode.id,
-              type: 'process',
-              position: { x: savedNode.x_position, y: savedNode.y_position },
-              data: {
-                nodeType: savedNode.node_type,
-                label: savedNode.label,
-                description: savedNode.description ?? '',
-                taggedProfileIds: [],
-                taggedDepartmentIds: [],
-              },
-            }
-            const nextNodes = [...nodesRef.current, newNode]
-            setNodes(nextNodes)
-            pushToHistory(nextNodes, edgesRef.current)
-          },
-        }
-      )
+      }
+      const nextNodes = [...nodesRef.current, newNode]
+      setNodes(nextNodes)
+      pushToHistory(nextNodes, edgesRef.current)
+      markDirty()
     },
-    [canEdit, processId, rfInstance, screenToFlowPosition, setNodes, pushToHistory]
+    [canEdit, rfInstance, screenToFlowPosition, setNodes, pushToHistory, markDirty]
   )
 
   const handleDragStart = useCallback((event: React.DragEvent, nodeType: ProcessNodeType) => {
@@ -508,30 +716,29 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
     (edgeId: string, waypoints: { x: number; y: number }[]) => {
       const nextEdges = edgesRef.current.map((e) => e.id === edgeId ? { ...e, data: { ...e.data, waypoints } } : e)
       setEdges(nextEdges)
-      updateEdgeRef.current.mutate({ id: edgeId, process_id: processId, waypoints })
       pushToHistory(nodesRef.current, nextEdges)
+      markDirty()
     },
-    [processId, setEdges, pushToHistory]
+    [setEdges, pushToHistory, markDirty]
   )
 
   const handleReverseEdge = useCallback(
     (edgeId: string, edgeSource: string, edgeTarget: string) => {
-      deleteEdgeRef.current.mutate({ id: edgeId, process_id: processId })
-      createEdgeRef.current.mutate(
-        { process_id: processId, source_node_id: edgeTarget, target_node_id: edgeSource },
-        {
-          onSuccess: (savedEdge) => {
-            const nextEdges = [
-              ...edgesRef.current.filter((e) => e.id !== edgeId),
-              { id: savedEdge.id, source: edgeTarget, target: edgeSource, type: 'process', data: { canEdit, waypoints: [] } },
-            ]
-            setEdges(nextEdges)
-            pushToHistory(nodesRef.current, nextEdges)
-          },
-        }
+      const nextEdges = edgesRef.current.map((e) =>
+        e.id !== edgeId
+          ? e
+          : {
+              ...e,
+              source: edgeTarget,
+              target: edgeSource,
+              data: { ...e.data, waypoints: [], srcSide: null, tgtSide: null },
+            }
       )
+      setEdges(nextEdges)
+      pushToHistory(nodesRef.current, nextEdges)
+      markDirty()
     },
-    [processId, canEdit, setEdges, pushToHistory]
+    [setEdges, pushToHistory, markDirty]
   )
 
   // Memoized context value — only recreates when actual values change
@@ -564,6 +771,16 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
     ]
   )
 
+  const saveStatusLabel = saveError
+    ? 'Save failed'
+    : isSaving
+      ? 'Saving...'
+      : hasUnsavedChanges
+        ? 'Unsaved changes'
+        : lastSavedAt
+          ? `Saved ${lastSavedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+          : 'Saved'
+
   return (
     <ProcessCanvasContext.Provider value={contextValue}>
       <div className="flex w-full h-full">
@@ -582,6 +799,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
             onConnect={onConnect}
             onReconnect={canEdit ? onReconnect : undefined}
             onEdgesDelete={onEdgesDelete}
+            onNodesDelete={onNodesDelete}
             onNodeDragStop={handleNodeDragStop}
             onDragOver={onDragOver}
             onDrop={onDrop}
@@ -602,9 +820,24 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
             <Background gap={20} size={1} color="#e5e7eb" />
             <Controls />
             <MiniMap nodeColor={() => '#94a3b8'} maskColor="rgba(0,0,0,0.06)" />
+            {canEdit && hasPendingRemoteChanges && (
+              <Panel position="top-left">
+                <div className="flex items-center gap-2 bg-white rounded-lg border border-amber-300 shadow-sm p-2">
+                  <p className="text-xs text-amber-700">
+                    Remote updates are available.
+                  </p>
+                  <button
+                    onClick={applyPendingRemoteSnapshot}
+                    className="text-xs font-medium px-2 py-1 rounded bg-amber-100 text-amber-800 hover:bg-amber-200 transition-colors"
+                  >
+                    Apply remote
+                  </button>
+                </div>
+              </Panel>
+            )}
             {canEdit && (
               <Panel position="top-right">
-                <div className="flex items-center gap-0.5 bg-white rounded-lg border border-gray-200 shadow-sm p-1">
+                <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 shadow-sm p-1.5">
                   <button
                     onClick={undo}
                     disabled={!canUndo}
@@ -621,6 +854,28 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
                   >
                     <Redo2 className="h-4 w-4" />
                   </button>
+                  <div className="w-px h-5 bg-gray-200 mx-0.5" />
+                  <button
+                    onClick={() => { void saveChanges({ force: true }) }}
+                    disabled={isSaving || !hasUnsavedChanges}
+                    className="inline-flex items-center gap-1.5 px-2 py-1.5 rounded text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    title="Save now"
+                  >
+                    {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    <span className="text-xs font-medium">Save</span>
+                  </button>
+                  <span
+                    className={`text-[11px] ml-1 ${
+                      saveError
+                        ? 'text-red-500'
+                        : hasUnsavedChanges
+                          ? 'text-amber-600'
+                          : 'text-gray-500'
+                    }`}
+                    title={saveError ?? undefined}
+                  >
+                    {saveStatusLabel}
+                  </span>
                 </div>
               </Panel>
             )}

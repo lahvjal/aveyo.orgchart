@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
 import type { Department, OrgChartPosition, ShareLink } from '../types'
+import type { Database } from '../types/database'
 
 // Departments
 export function useDepartments({ enabled = true }: { enabled?: boolean } = {}) {
@@ -337,19 +338,27 @@ export interface ProcessShareLink {
   created_at: string
 }
 
+type ProcessShareLinkRow = Database['public']['Tables']['process_share_links']['Row']
+type ProcessShareLinkInsert = Database['public']['Tables']['process_share_links']['Insert']
+type ProcessShareLinkUpdate = Database['public']['Tables']['process_share_links']['Update']
+
+function mapProcessShareLinkRow(row: ProcessShareLinkRow): ProcessShareLink {
+  return row
+}
+
 /** Authenticated: list all share links for a specific process */
 export function useProcessShareLinks(processId: string | null) {
   return useQuery({
     queryKey: ['process-share-links', processId],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('process_share_links')
         .select('*')
-        .eq('process_id', processId)
+        .eq('process_id', processId as string)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      return data as ProcessShareLink[]
+      return (data ?? []).map(mapProcessShareLinkRow)
     },
     enabled: !!processId,
   })
@@ -365,7 +374,7 @@ export function usePublicProcessShareLink(slug: string) {
   return useQuery({
     queryKey: ['public-process-share-link', slug],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from('process_share_links')
         .select('*')
         .eq('slug', slug)
@@ -379,7 +388,7 @@ export function usePublicProcessShareLink(slug: string) {
 
       if (!data) return null
 
-      const link = data as ProcessShareLink
+      const link = mapProcessShareLinkRow(data)
 
       if (link.expires_at && new Date(link.expires_at) < new Date()) {
         return null
@@ -410,19 +419,21 @@ export function useCreateProcessShareLink() {
       // crypto.randomUUID() — 128-bit cryptographically secure random slug
       const slug = crypto.randomUUID().replace(/-/g, '')
 
-      const { data, error } = await (supabase as any)
+      const payload: ProcessShareLinkInsert = {
+        slug,
+        process_id,
+        created_by: user.id,
+        expires_at: expires_at || null,
+      }
+
+      const { data, error } = await supabase
         .from('process_share_links')
-        .insert({
-          slug,
-          process_id,
-          created_by: user.id,
-          expires_at: expires_at || null,
-        })
+        .insert(payload)
         .select()
         .single()
 
       if (error) throw error
-      return data as ProcessShareLink
+      return mapProcessShareLinkRow(data)
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['process-share-links', variables.process_id] })
@@ -435,16 +446,18 @@ export function useToggleProcessShareLink() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: async ({ id, process_id: _process_id, is_active }: { id: string; process_id: string; is_active: boolean }) => {
-      const { data, error } = await (supabase as any)
+    mutationFn: async (variables: { id: string; process_id: string; is_active: boolean }) => {
+      const { id, is_active } = variables
+      const patch: ProcessShareLinkUpdate = { is_active }
+      const { data, error } = await supabase
         .from('process_share_links')
-        .update({ is_active })
+        .update(patch)
         .eq('id', id)
         .select()
         .single()
 
       if (error) throw error
-      return data as ProcessShareLink
+      return mapProcessShareLinkRow(data)
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['process-share-links', variables.process_id] })
@@ -458,7 +471,7 @@ export function useDeleteProcessShareLink() {
 
   return useMutation({
     mutationFn: async ({ id, process_id }: { id: string; process_id: string }) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from('process_share_links')
         .delete()
         .eq('id', id)

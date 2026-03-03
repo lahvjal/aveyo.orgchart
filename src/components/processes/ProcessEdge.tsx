@@ -369,6 +369,7 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
 
     const startPos     = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     const snapCorners  = [...corners]  // snapshot at drag start
+    let didMove = false
     draggingSegRef.current    = segIdx
     dragStartPosRef.current   = startPos
     initialCornersRef.current = snapCorners
@@ -382,6 +383,7 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
     const onMouseMove = (me: MouseEvent) => {
       const pos   = screenToFlowPosition({ x: me.clientX, y: me.clientY })
       const delta = { x: pos.x - startPos.x, y: pos.y - startPos.y }
+      if (Math.abs(delta.x) > 0.5 || Math.abs(delta.y) > 0.5) didMove = true
       const next  = applySegmentDrag(snapCorners, segIdx, delta)
       latestCornersRef.current = next
       setDragCorners(next)
@@ -389,7 +391,7 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
 
     const onMouseUp = () => {
       document.body.style.cursor = ''
-      if (latestCornersRef.current) {
+      if (didMove && latestCornersRef.current) {
         const finalWaypoints = cleanupCorners(latestCornersRef.current).slice(1, -1)
         onUpdateEdgeWaypoints(id, finalWaypoints)
       }
@@ -409,22 +411,53 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
 
   // ── Hover detection on the wide overlay path ───────────────────────────────
 
-  const handleOverlayMouseMove = (e: React.MouseEvent) => {
-    if (!isEditing || isDragging) return
-    const pos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+  const getNearestSegmentIndex = (clientX: number, clientY: number, threshold = 14): number | null => {
+    const pos = screenToFlowPosition({ x: clientX, y: clientY })
     let nearest: number | null = null
-    let minDist = 14  // px threshold in flow coords
+    let minDist = threshold
     segments.forEach((seg, i) => {
       const d = distToSegment(pos, { x: seg.x1, y: seg.y1 }, { x: seg.x2, y: seg.y2 })
       if (d < minDist) { minDist = d; nearest = i }
     })
-    setHoveredSegIdx(nearest)
+    return nearest
+  }
+
+  const handleOverlayMouseMove = (e: React.MouseEvent) => {
+    if (!isEditing || isDragging) return
+    setHoveredSegIdx(getNearestSegmentIndex(e.clientX, e.clientY))
   }
 
   const handleOverlayMouseLeave = () => { if (!isDragging) setHoveredSegIdx(null) }
 
   const handleOverlayMouseDown = (e: React.MouseEvent) => {
     if (hoveredSegIdx !== null) startSegmentDrag(e, hoveredSegIdx)
+  }
+
+  const handleOverlayDoubleClick = (e: React.MouseEvent) => {
+    if (!isEditing || isDragging) return
+    e.stopPropagation()
+    e.preventDefault()
+
+    const segIdx = hoveredSegIdx ?? getNearestSegmentIndex(e.clientX, e.clientY, 18)
+    if (segIdx === null) return
+
+    // Remove one bend adjacent to the clicked segment, then persist the simplified route.
+    const cleaned = cleanupCorners(corners)
+    if (cleaned.length <= 2) return
+
+    const maxSegIdx = cleaned.length - 2
+    const clampedSegIdx = Math.max(0, Math.min(maxSegIdx, segIdx))
+    const removeCornerIdx =
+      clampedSegIdx <= 0
+        ? 1
+        : clampedSegIdx >= maxSegIdx
+          ? cleaned.length - 2
+          : clampedSegIdx
+
+    const nextCorners = cleaned.filter((_, i) => i !== removeCornerIdx)
+    const nextWaypoints = cleanupCorners(nextCorners).slice(1, -1)
+    onUpdateEdgeWaypoints(id, nextWaypoints)
+    setHoveredSegIdx(null)
   }
 
   // ── Cursor for the overlay ─────────────────────────────────────────────────
@@ -472,6 +505,7 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
           onMouseMove={handleOverlayMouseMove}
           onMouseLeave={handleOverlayMouseLeave}
           onMouseDown={handleOverlayMouseDown}
+          onDoubleClick={handleOverlayDoubleClick}
         />
       )}
 

@@ -44,6 +44,31 @@ export interface ProcessEdge {
   created_at: string
 }
 
+export interface ProcessEditLock {
+  process_id: string
+  locked_by: string
+  locked_by_name: string
+  locked_at: string
+}
+
+export interface ProcessLockAcquireResult {
+  acquired: boolean
+  process_id: string
+  locked_by: string
+  locked_by_name: string
+  locked_at: string
+  message: 'lock_acquired' | 'already_owner' | 'locked_by_other' | 'lock_taken_over' | string
+}
+
+export interface ProcessLockReleaseResult {
+  released: boolean
+  process_id: string
+  locked_by: string | null
+  locked_by_name: string | null
+  locked_at: string | null
+  message: 'lock_released' | 'not_lock_owner' | 'lock_not_found' | string
+}
+
 export interface ProcessNodeTypeConfig {
   type: ProcessNodeType
   label: string

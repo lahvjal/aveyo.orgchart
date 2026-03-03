@@ -34,7 +34,7 @@ export function useProfile(userId?: string) {
       }
       
       console.log('useProfile: Successfully fetched profile:', data)
-      return data as Profile
+      return data as unknown as Profile
     },
   })
 }
@@ -131,7 +131,7 @@ export function useProfiles({ enabled = true }: { enabled?: boolean } = {}) {
       }
       
       console.log('useProfiles: Fetched profiles:', data)
-      return data as Profile[]
+      return data as unknown as Profile[]
     },
   })
 }

@@ -50,7 +50,7 @@ export function ProcessNodePalette({ onDragStart }: ProcessNodePaletteProps) {
         )
       })}
       <p className="mt-3 text-[10px] text-gray-400 leading-relaxed px-1">
-        Drag a node type onto the canvas to add it. Connect nodes by dragging from the bottom handle to another node's top handle.
+        Drag a node type onto the canvas to add it. Connect nodes by dragging from any source handle and dropping anywhere on the destination node.
       </p>
     </aside>
   )

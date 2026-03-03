@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "lint:process": "eslint \"src/components/processes/ProcessCanvas.tsx\" \"src/components/processes/ProcessNode.tsx\" \"src/components/processes/ProcessNodePalette.tsx\" \"src/hooks/useProcesses.ts\" \"src/pages/Processes.tsx\" \"src/pages/PublicProcessView.tsx\"",
     "preview": "vite preview"
   },
   "dependencies": {

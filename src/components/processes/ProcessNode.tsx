@@ -57,6 +57,7 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
   // True while the user is dragging a new connection from any node.
   // Used to make handles fully visible so valid drop targets are obvious.
   const isConnecting = useStore((s) => !!s.connectionNodeId)
+  const zoom = useStore((s) => s.transform[2] ?? 1)
 
   const config = getNodeTypeConfig(nodeType)
   const Icon = NODE_ICONS[nodeType]
@@ -160,21 +161,46 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
 
   // Handles: visible only in edit mode.
   //
-  // On plain node-hover they appear at low opacity with pointer-events:none so
-  // they don't block access to edge endpoints/reconnect handles that sit at the
-  // same position. They become fully interactive only when the cursor moves
-  // directly over the handle itself, or when the user is mid-drag on a new
-  // connection (showing valid drop targets across all nodes).
-  const handleCls = cn(
+  // Source/target handles overlap on each side. While dragging a new connection,
+  // only target handles should accept pointer events; otherwise drops can land on
+  // overlapping source handles and silently fail to connect.
+  const targetHandleCls = cn(
     '!bg-primary !border-2 !border-white !rounded-full !shadow-sm transition-all duration-150',
     isEditing
       ? isConnecting
-        // Actively drawing a connection → show all handles as valid targets
-        ? '!w-3 !h-3 !opacity-100 !pointer-events-auto'
-        // Idle → ghost on node-hover (non-blocking), full on direct hover
-        : '!w-3 !h-3 !opacity-0 group-hover:!opacity-30 group-hover:!pointer-events-none hover:!opacity-100 hover:!pointer-events-auto hover:!w-4 hover:!h-4 hover:!shadow-md'
-      : '!opacity-0 !pointer-events-none !w-2 !h-2',
+        // Actively drawing a connection → valid drop targets are interactive
+        ? '!opacity-100 !pointer-events-auto'
+        // Idle → ghost on node-hover (interactive), full on direct hover
+        : '!opacity-0 !pointer-events-none group-hover:!opacity-45 group-hover:!pointer-events-auto hover:!opacity-100 hover:!shadow-md'
+      : '!opacity-0 !pointer-events-none',
   )
+  const sourceHandleCls = cn(
+    '!bg-primary !border-2 !border-white !rounded-full !shadow-sm transition-all duration-150',
+    isEditing
+      ? isConnecting
+        // During connect-drag, disable source handles to avoid overlap conflicts.
+        ? '!opacity-45 !pointer-events-none'
+        : '!opacity-0 !pointer-events-none group-hover:!opacity-45 group-hover:!pointer-events-auto hover:!opacity-100 hover:!shadow-md'
+      : '!opacity-0 !pointer-events-none',
+  )
+  const handleSize = 18 / Math.max(zoom, 0.1)
+  const handleStyle: React.CSSProperties = { width: handleSize, height: handleSize }
+  const nodeBodyTargetStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    transform: 'none',
+    opacity: 0,
+    background: 'transparent',
+    border: 'none',
+    borderRadius: 'inherit',
+    pointerEvents: isEditing && isConnecting ? 'auto' : 'none',
+    // During connection drag, lift above node content so dropping anywhere
+    // on the node reliably lands on this target handle.
+    zIndex: isEditing && isConnecting ? 20 : 0,
+  }
 
   return (
     <div
@@ -187,34 +213,22 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
         node — not just on the small side handles. React Flow detects it via its
         bounding box; our ProcessEdge getBestHandles() still picks the correct
         visual routing independently of which handle was used.
-        pointer-events:none ensures it never blocks clicks on node content.
+        It only accepts pointer events while a connection is being dragged, so it
+        never blocks normal node interactions.
       */}
       <Handle
         type="target"
         position={Position.Top}
         id="node-body"
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          transform: 'none',
-          opacity: 0,
-          background: 'transparent',
-          border: 'none',
-          borderRadius: 'inherit',
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
+        style={nodeBodyTargetStyle}
       />
 
-      <Handle type="target" position={Position.Top}    id="top-target"    className={cn(handleCls, 'top-handle-target')} />
-      <Handle type="source" position={Position.Top}    id="top-source"    className={cn(handleCls, 'top-handle-source')} />
-      <Handle type="target" position={Position.Left}   id="left-target"   className={cn(handleCls, 'left-handle-target')} />
-      <Handle type="source" position={Position.Left}   id="left-source"   className={cn(handleCls, 'left-handle-source')} />
-      <Handle type="target" position={Position.Right}  id="right-target"  className={cn(handleCls, 'right-handle-target')} />
-      <Handle type="source" position={Position.Right}  id="right-source"  className={cn(handleCls, 'right-handle-source')} />
+      <Handle type="target" position={Position.Top}    id="top-target"    className={cn(targetHandleCls, 'top-handle-target')} style={handleStyle} />
+      <Handle type="source" position={Position.Top}    id="top-source"    className={cn(sourceHandleCls, 'top-handle-source')} style={handleStyle} />
+      <Handle type="target" position={Position.Left}   id="left-target"   className={cn(targetHandleCls, 'left-handle-target')} style={handleStyle} />
+      <Handle type="source" position={Position.Left}   id="left-source"   className={cn(sourceHandleCls, 'left-handle-source')} style={handleStyle} />
+      <Handle type="target" position={Position.Right}  id="right-target"  className={cn(targetHandleCls, 'right-handle-target')} style={handleStyle} />
+      <Handle type="source" position={Position.Right}  id="right-source"  className={cn(sourceHandleCls, 'right-handle-source')} style={handleStyle} />
 
       <div className="p-3">
         {/* Header */}
@@ -443,8 +457,8 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
         )}
       </div>
 
-      <Handle type="target" position={Position.Bottom} id="bottom-target" className={cn(handleCls, 'bottom-handle-target')} />
-      <Handle type="source" position={Position.Bottom} id="bottom-source" className={cn(handleCls, 'bottom-handle-source')} />
+      <Handle type="target" position={Position.Bottom} id="bottom-target" className={cn(targetHandleCls, 'bottom-handle-target')} style={handleStyle} />
+      <Handle type="source" position={Position.Bottom} id="bottom-source" className={cn(sourceHandleCls, 'bottom-handle-source')} style={handleStyle} />
     </div>
   )
 })

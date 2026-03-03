@@ -30,6 +30,7 @@ export interface Database {
           is_manager: boolean
           is_executive: boolean
           is_super_admin: boolean
+          is_process_editor: boolean
           onboarding_completed: boolean
           created_at: string
           updated_at: string
@@ -54,6 +55,7 @@ export interface Database {
           is_manager?: boolean
           is_executive?: boolean
           is_super_admin?: boolean
+          is_process_editor?: boolean
           onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
@@ -78,10 +80,27 @@ export interface Database {
           is_manager?: boolean
           is_executive?: boolean
           is_super_admin?: boolean
+          is_process_editor?: boolean
           onboarding_completed?: boolean
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'profiles_department_id_fkey'
+            columns: ['department_id']
+            isOneToOne: false
+            referencedRelation: 'departments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'profiles_manager_id_fkey'
+            columns: ['manager_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
       departments: {
         Row: {
@@ -108,6 +127,15 @@ export interface Database {
           parent_id?: string | null
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'departments_parent_id_fkey'
+            columns: ['parent_id']
+            isOneToOne: false
+            referencedRelation: 'departments'
+            referencedColumns: ['id']
+          },
+        ]
       }
       org_chart_positions: {
         Row: {
@@ -134,6 +162,22 @@ export interface Database {
           updated_at?: string
           updated_by?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'org_chart_positions_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: true
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'org_chart_positions_updated_by_fkey'
+            columns: ['updated_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
       share_links: {
         Row: {
@@ -163,6 +207,22 @@ export interface Database {
           created_by?: string
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'share_links_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'share_links_root_profile_id_fkey'
+            columns: ['root_profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
       audit_logs: {
         Row: {
@@ -189,6 +249,22 @@ export interface Database {
           changes?: Json
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'audit_logs_changed_by_fkey'
+            columns: ['changed_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'audit_logs_profile_id_fkey'
+            columns: ['profile_id']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
       organization_settings: {
         Row: {
@@ -212,7 +288,240 @@ export interface Database {
           updated_at?: string
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: 'organization_settings_updated_by_fkey'
+            columns: ['updated_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
+      processes: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          created_by: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          description?: string | null
+          created_by: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          description?: string | null
+          created_by?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'processes_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      process_nodes: {
+        Row: {
+          id: string
+          process_id: string
+          node_type: string
+          label: string
+          description: string | null
+          x_position: number
+          y_position: number
+          tagged_profile_ids: string[]
+          tagged_department_ids: string[]
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          process_id: string
+          node_type?: string
+          label?: string
+          description?: string | null
+          x_position?: number
+          y_position?: number
+          tagged_profile_ids?: string[]
+          tagged_department_ids?: string[]
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          process_id?: string
+          node_type?: string
+          label?: string
+          description?: string | null
+          x_position?: number
+          y_position?: number
+          tagged_profile_ids?: string[]
+          tagged_department_ids?: string[]
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'process_nodes_process_id_fkey'
+            columns: ['process_id']
+            isOneToOne: false
+            referencedRelation: 'processes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      process_edges: {
+        Row: {
+          id: string
+          process_id: string
+          source_node_id: string
+          target_node_id: string
+          label: string | null
+          waypoints: Json | null
+          source_side: string | null
+          target_side: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          process_id: string
+          source_node_id: string
+          target_node_id: string
+          label?: string | null
+          waypoints?: Json | null
+          source_side?: string | null
+          target_side?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          process_id?: string
+          source_node_id?: string
+          target_node_id?: string
+          label?: string | null
+          waypoints?: Json | null
+          source_side?: string | null
+          target_side?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'process_edges_process_id_fkey'
+            columns: ['process_id']
+            isOneToOne: false
+            referencedRelation: 'processes'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'process_edges_source_node_id_fkey'
+            columns: ['source_node_id']
+            isOneToOne: false
+            referencedRelation: 'process_nodes'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'process_edges_target_node_id_fkey'
+            columns: ['target_node_id']
+            isOneToOne: false
+            referencedRelation: 'process_nodes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      process_share_links: {
+        Row: {
+          id: string
+          slug: string
+          process_id: string
+          created_by: string
+          expires_at: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          process_id: string
+          created_by: string
+          expires_at?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          slug?: string
+          process_id?: string
+          created_by?: string
+          expires_at?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'process_share_links_created_by_fkey'
+            columns: ['created_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'process_share_links_process_id_fkey'
+            columns: ['process_id']
+            isOneToOne: false
+            referencedRelation: 'processes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      process_edit_locks: {
+        Row: {
+          process_id: string
+          locked_by: string
+          locked_by_name: string
+          locked_at: string
+        }
+        Insert: {
+          process_id: string
+          locked_by: string
+          locked_by_name: string
+          locked_at?: string
+        }
+        Update: {
+          process_id?: string
+          locked_by?: string
+          locked_by_name?: string
+          locked_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'process_edit_locks_locked_by_fkey'
+            columns: ['locked_by']
+            isOneToOne: false
+            referencedRelation: 'profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'process_edit_locks_process_id_fkey'
+            columns: ['process_id']
+            isOneToOne: true
+            referencedRelation: 'processes'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
     }
     Functions: {
       get_profile_branch: {
@@ -262,6 +571,52 @@ export interface Database {
           updated_at: string
         }[]
       }
+      can_edit_process_for_lock: {
+        Args: {
+          p_process_id: string
+          p_user_id: string
+        }
+        Returns: boolean
+      }
+      acquire_process_edit_lock: {
+        Args: { p_process_id: string }
+        Returns: {
+          acquired: boolean
+          process_id: string
+          locked_by: string
+          locked_by_name: string
+          locked_at: string
+          message: string
+        }[]
+      }
+      force_takeover_process_edit_lock: {
+        Args: { p_process_id: string }
+        Returns: {
+          acquired: boolean
+          process_id: string
+          locked_by: string
+          locked_by_name: string
+          locked_at: string
+          message: string
+        }[]
+      }
+      release_process_edit_lock: {
+        Args: { p_process_id: string }
+        Returns: {
+          released: boolean
+          process_id: string
+          locked_by: string | null
+          locked_by_name: string | null
+          locked_at: string | null
+          message: string
+        }[]
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
     }
   }
 }
