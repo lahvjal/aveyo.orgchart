@@ -107,7 +107,7 @@ If a user is both an admin AND a manager:
 
 ### Can't Invite Team Members
 
-1. Verify `VITE_SUPABASE_SERVICE_ROLE_KEY` is set in `.env.local`
+1. Verify edge-function secrets are set (`RESEND_API_KEY`, `FROM_EMAIL`, `APP_URL`)
 2. Check browser console for errors
 3. Verify the manager has permission (check `is_manager = TRUE`)
 

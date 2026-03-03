@@ -1,8 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { AlertCircle, Eye, Calendar } from 'lucide-react'
-import { usePublicProcessShareLink, useOrganizationSettings } from '../lib/queries'
-import { useProcess, useProcessNodes, useProcessEdges } from '../hooks/useProcesses'
-import { ProcessCanvas } from '../components/processes/ProcessCanvas'
+import { useOrganizationSettings, usePublicProcessBundle } from '../lib/queries'
+import { PublicProcessCanvas } from '../components/processes/PublicProcessCanvas'
 import { Card } from '../components/ui/card'
 import { Badge } from '../components/ui/badge'
 
@@ -35,33 +34,27 @@ export default function PublicProcessView() {
   const { slug } = useParams<{ slug: string }>()
 
   const {
-    data: shareLink,
-    isLoading: linkLoading,
-    isFetched: linkFetched,
-    error: linkError,
-  } = usePublicProcessShareLink(slug!)
-
-
-  const processId = shareLink?.process_id ?? null
-
-  // All hooks must be called unconditionally before any early returns
-  const { data: process, isLoading: processLoading } = useProcess(processId)
+    data: bundle,
+    isLoading: bundleLoading,
+    isFetched: bundleFetched,
+    error: bundleError,
+  } = usePublicProcessBundle(slug!)
   const { data: orgSettings } = useOrganizationSettings()
-  useProcessNodes(processId)
-  useProcessEdges(processId)
 
-  if (linkLoading || (shareLink && processLoading)) {
+  if (bundleLoading) {
     return <LoadingScreen />
   }
 
-  if (linkError || (linkFetched && !shareLink)) {
+  if (bundleError || (bundleFetched && !bundle)) {
     return <ErrorScreen />
   }
 
-  if (!shareLink || !process) {
+  if (!bundle) {
     return <LoadingScreen />
   }
 
+  const { share_link: shareLink, process, nodes, edges } = bundle
+  const processId = shareLink.process_id
   const expiresAt = shareLink.expires_at ? new Date(shareLink.expires_at) : null
 
   return (
@@ -106,7 +99,7 @@ export default function PublicProcessView() {
       {/* Canvas — explicit calc height mirrors how PublicShare.tsx handles ReactFlow */}
       <div className="h-[calc(100vh-7rem)] p-3">
         <div className="h-full bg-white rounded-lg shadow-lg overflow-hidden">
-          <ProcessCanvas processId={processId!} canEdit={false} isPublic />
+          <PublicProcessCanvas processId={processId} nodes={nodes} edges={edges} />
         </div>
       </div>
 

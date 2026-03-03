@@ -1,7 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
-import type { Department, OrgChartPosition, ShareLink } from '../types'
+import type { Department, OrgChartPosition, Profile, ShareLink } from '../types'
 import type { Database } from '../types/database'
+import type { Process, ProcessEdge, ProcessNode } from '../types/processes'
 
 // Departments
 export function useDepartments({ enabled = true }: { enabled?: boolean } = {}) {
@@ -272,6 +273,37 @@ export function useShareLink(slug: string) {
   })
 }
 
+export interface PublicOrgShareBundle {
+  share_link: {
+    slug: string
+    root_profile_id: string
+    include_contact_info: boolean
+    expires_at: string | null
+  }
+  profiles: Profile[]
+}
+
+export function usePublicOrgShareBundle(slug: string) {
+  return useQuery({
+    queryKey: ['public-org-share-bundle', slug],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_public_org_share_bundle', {
+        p_slug: slug,
+      })
+
+      if (error) {
+        console.error('[public-org-share] lookup failed:', error)
+        throw error
+      }
+
+      if (!data) return null
+      return data as unknown as PublicOrgShareBundle
+    },
+    enabled: !!slug,
+    retry: false,
+  })
+}
+
 export function useCreateShareLink() {
   const queryClient = useQueryClient()
 
@@ -395,6 +427,52 @@ export function usePublicProcessShareLink(slug: string) {
       }
 
       return link
+    },
+    enabled: !!slug,
+    retry: false,
+  })
+}
+
+export interface PublicProcessBundle {
+  share_link: {
+    slug: string
+    process_id: string
+    expires_at: string | null
+    is_active: boolean
+  }
+  process: Process
+  nodes: ProcessNode[]
+  edges: ProcessEdge[]
+}
+
+export function usePublicProcessBundle(slug: string) {
+  return useQuery({
+    queryKey: ['public-process-bundle', slug],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_public_process_bundle', {
+        p_slug: slug,
+      })
+
+      if (error) {
+        console.error('[public-process-share] bundle lookup failed:', error)
+        throw error
+      }
+
+      if (!data) return null
+
+      const raw = data as unknown as {
+        share_link: PublicProcessBundle['share_link']
+        process: Process
+        nodes: ProcessNode[]
+        edges: ProcessEdge[]
+      }
+
+      return {
+        share_link: raw.share_link,
+        process: raw.process,
+        nodes: raw.nodes ?? [],
+        edges: raw.edges ?? [],
+      } satisfies PublicProcessBundle
     },
     enabled: !!slug,
     retry: false,

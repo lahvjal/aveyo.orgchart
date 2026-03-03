@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { sendEmployeeInvitationEmail } from '../lib/notifications'
-import { invokeAdminUserOps } from '../lib/adminUserOps'
+import { getAdminErrorMessage, invokeAdminUserOps } from '../lib/adminUserOps'
 
 interface InviteEmployeeData {
   email: string
@@ -21,13 +21,33 @@ interface InviteEmployeeResult {
   error?: string
 }
 
+interface InviteActorProfile {
+  is_admin: boolean | null
+  is_super_admin: boolean | null
+  is_manager: boolean | null
+}
+
+interface CreateUserResponse {
+  success?: boolean
+  error?: string
+  user?: {
+    id: string
+    email: string
+  }
+}
+
+interface UpdateProfileResponse {
+  success?: boolean
+  error?: string
+}
+
 /**
  * Hook for inviting new employees
  *
  * This hook:
  * 1. Creates a new user account via the admin-user-ops edge function
- * 2. Generates a magic link for password setup (server-side)
- * 3. Sends an invitation email with the magic link
+ * 2. Updates profile manager/department assignment if provided
+ * 3. Sends invitation email via edge function (server-side link generation)
  * 4. The handle_new_user trigger automatically creates the profile
  */
 export function useInviteEmployee() {
@@ -46,13 +66,12 @@ export function useInviteEmployee() {
       // Get current user's profile for permission check and "invited by" name
       const { data: currentProfile } = await supabase
         .from('profiles')
-        .select('full_name, is_admin, is_manager')
+        .select('is_admin, is_super_admin, is_manager')
         .eq('id', currentUser.id)
-        .single()
+        .single<InviteActorProfile>()
 
-      const invitedByName = (currentProfile as any)?.full_name || 'Administrator'
-      const isAdmin = (currentProfile as any)?.is_admin || false
-      const isManager = (currentProfile as any)?.is_manager || false
+      const isAdmin = Boolean(currentProfile?.is_admin || currentProfile?.is_super_admin)
+      const isManager = Boolean(currentProfile?.is_manager)
 
       // Validate manager mode permissions
       if (data.managerMode) {
@@ -69,7 +88,7 @@ export function useInviteEmployee() {
 
         // Step 1: Create user account via edge function
         console.log('useInviteEmployee: Creating user account via edge function')
-        const { data: createData, error: createError } = await invokeAdminUserOps({
+        const { data: createData, error: createError } = await invokeAdminUserOps<CreateUserResponse>({
           action: 'createUser',
           userId: currentUser.id,
           email: data.email,
@@ -82,16 +101,7 @@ export function useInviteEmployee() {
         })
 
         if (createError || !createData?.success) {
-          let errMsg = createData?.error || createError?.message || 'Failed to create user account'
-
-          // Extract the real error body from the edge function response (non-2xx puts
-          // it in error.context rather than data, which is null for non-2xx responses).
-          if (createError && !createData) {
-            try {
-              const errBody = await (createError as any).context?.json?.()
-              if (errBody?.error) errMsg = errBody.error
-            } catch (_) {}
-          }
+          const errMsg = getAdminErrorMessage(createData, createError, 'Failed to create user account')
 
           console.error('useInviteEmployee: Error creating user:', errMsg)
 
@@ -101,13 +111,17 @@ export function useInviteEmployee() {
           return { success: false, error: errMsg }
         }
 
+        if (!createData.user?.id) {
+          return { success: false, error: 'User was created but no user ID was returned' }
+        }
+
         const newUserId = createData.user.id
         console.log('useInviteEmployee: User created successfully:', newUserId)
 
         // Step 1.5: Update profile with additional fields (manager, department)
         if (data.managerId || data.departmentId) {
           console.log('useInviteEmployee: Updating profile with manager/department')
-          const { data: updateData, error: updateError } = await invokeAdminUserOps({
+          const { data: updateData, error: updateError } = await invokeAdminUserOps<UpdateProfileResponse>({
             action: 'updateProfile',
             userId: currentUser.id,
             targetUserId: newUserId,
@@ -118,51 +132,20 @@ export function useInviteEmployee() {
           })
 
           if (updateError || !updateData?.success) {
-            console.warn('useInviteEmployee: Failed to update manager/department:', updateData?.error || updateError)
+            console.warn(
+              'useInviteEmployee: Failed to update manager/department:',
+              getAdminErrorMessage(updateData, updateError, 'Failed to update manager/department')
+            )
             // Don't fail the entire invitation for this
           }
         }
 
-        // Step 2: Generate magic link via edge function
-        console.log('useInviteEmployee: Generating magic link')
+        // Step 2: Send invitation email (edge function generates magic link server-side)
         const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
-        const { data: linkData, error: linkError } = await invokeAdminUserOps({
-          action: 'generateLink',
-          userId: currentUser.id,
-          email: data.email,
-          linkType: 'magiclink',
-          redirectTo: `${appUrl}/onboarding`,
-        })
-
-        if (linkError || !linkData?.success || !linkData?.actionLink) {
-          let linkErrMsg = linkData?.error || 'User created but failed to generate invitation link'
-
-          if (linkError && !linkData) {
-            try {
-              const errBody = await (linkError as any).context?.json?.()
-              if (errBody?.error) linkErrMsg = `Failed to generate invitation link: ${errBody.error}`
-            } catch (_) {}
-          }
-
-          console.error('useInviteEmployee: Error generating magic link:', linkErrMsg)
-          return {
-            success: false,
-            userId: newUserId,
-            error: linkErrMsg,
-          }
-        }
-
-        const magicLink = linkData.actionLink
-        console.log('useInviteEmployee: Magic link generated successfully')
-
-        // Step 3: Send invitation email
         console.log('useInviteEmployee: Sending invitation email')
         const emailResult = await sendEmployeeInvitationEmail(
-          data.email,
-          fullName,
-          data.jobTitle,
-          invitedByName,
-          magicLink
+          newUserId,
+          `${appUrl}/onboarding`
         )
 
         if (!emailResult.success) {

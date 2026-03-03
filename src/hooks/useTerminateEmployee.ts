@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
-import { invokeAdminUserOps } from '../lib/adminUserOps'
+import { getAdminErrorMessage, invokeAdminUserOps } from '../lib/adminUserOps'
 
 export interface TerminateEmployeeInput {
   targetUserId: string
@@ -11,6 +11,13 @@ export interface TerminateEmployeeInput {
 
 interface TerminateEmployeeResult {
   success: boolean
+  error?: string
+  reassignedCount?: number
+  terminatedAt?: string
+}
+
+interface TerminateEmployeeResponse {
+  success?: boolean
   error?: string
   reassignedCount?: number
   terminatedAt?: string
@@ -31,7 +38,7 @@ export function useTerminateEmployee() {
       }
 
       try {
-        const { data, error } = await invokeAdminUserOps({
+        const { data, error } = await invokeAdminUserOps<TerminateEmployeeResponse>({
           action: 'terminateEmployee',
           userId: currentUser.id,
           targetUserId: input.targetUserId,
@@ -41,22 +48,10 @@ export function useTerminateEmployee() {
         })
 
         if (error || !data?.success) {
-          let errMsg = data?.error || error?.message || 'Failed to terminate employee'
-
-          // For non-2xx function responses, Supabase puts the body in error.context.
-          if (error && !data) {
-            try {
-              const errBody = await (error as any).context?.json?.()
-              if (errBody?.error) {
-                const detail = errBody?.details ? ` (${errBody.details})` : ''
-                errMsg = `${errBody.error}${detail}`
-              }
-            } catch (_) {
-              // Keep fallback message.
-            }
+          return {
+            success: false,
+            error: getAdminErrorMessage(data, error, 'Failed to terminate employee'),
           }
-
-          return { success: false, error: errMsg }
         }
 
         return {
@@ -64,10 +59,10 @@ export function useTerminateEmployee() {
           reassignedCount: data.reassignedCount ?? 0,
           terminatedAt: data.terminatedAt,
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           success: false,
-          error: error?.message || 'An unexpected error occurred',
+          error: error instanceof Error ? error.message : 'An unexpected error occurred',
         }
       }
     },

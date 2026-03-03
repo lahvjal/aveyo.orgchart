@@ -10,12 +10,9 @@ Go to **Vercel Dashboard** → **Your Project** → **Settings** → **Environme
 
 | Variable Name | Value | Notes |
 |--------------|-------|-------|
-| `VITE_SUPABASE_URL` | `https://semzdcsumfnmjnhzhtst.supabase.co` | Your Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` | Your Supabase anon key |
-| `VITE_SUPABASE_SERVICE_ROLE_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` | Your Supabase service role key (for admin invites) |
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` | Your Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | `<anon-key>` | Your Supabase anon key |
 | `VITE_APP_URL` | `https://your-app.vercel.app` | **Your actual Vercel URL** (set after first deploy) |
-| `VITE_RESEND_API_KEY` | `re_zJ12TZbm_Gjs6y2ewcCFJtZoSjEnsoVWv` | Your Resend API key |
-| `VITE_FROM_EMAIL` | `noreply@send.aveyo.com` | Your verified sending domain |
 
 ### Important: VITE_APP_URL
 
@@ -88,12 +85,18 @@ supabase login
 # Link your project
 supabase link --project-ref semzdcsumfnmjnhzhtst
 
-# Set environment secrets
-supabase secrets set RESEND_API_KEY=re_zJ12TZbm_Gjs6y2ewcCFJtZoSjEnsoVWv
-supabase secrets set FROM_EMAIL=noreply@send.aveyo.com
+# Set edge-function secrets (server-side only)
+supabase secrets set RESEND_API_KEY=...
+supabase secrets set FROM_EMAIL=noreply@send.yourdomain.com
+supabase secrets set APP_URL=https://your-app.vercel.app
 
-# Deploy the function
-supabase functions deploy send-invitation-email --no-verify-jwt
+# Deploy privileged functions with JWT verification enabled
+supabase functions deploy admin-user-ops
+supabase functions deploy send-invitation-email
+supabase functions deploy send-notification-email
+
+# Deploy password reset function (public endpoint)
+supabase functions deploy send-password-reset-email
 ```
 
 **Without this step, employee invitations won't send emails!**
@@ -146,7 +149,7 @@ Every push to `main` branch automatically deploys to production!
 
 - Make sure to select all environments (Production, Preview, Development)
 - Redeploy after changing env vars
-- Check that Vite variables start with `VITE_`
+- Only browser-safe values should use `VITE_` prefixes
 
 ### Email Invitations Not Working
 
@@ -176,7 +179,7 @@ https://orgchart.aveyo.com
 ## Security Notes
 
 ✅ `.env.local` is NOT pushed to GitHub (in .gitignore)  
-✅ Service role key is safe (env vars only)  
+✅ Service role key is never set in Vercel client env vars  
 ✅ Vercel environment variables are encrypted  
 ✅ Edge Functions keep Resend API key server-side
 

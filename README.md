@@ -46,18 +46,22 @@ npm install
 cp .env.example .env.local
 ```
 
-3. Update `.env.local` with your Supabase credentials:
+3. Update `.env.local` with client-safe Supabase credentials:
 
 ```
 VITE_SUPABASE_URL=your-project-url
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 VITE_APP_URL=http://localhost:5173
-VITE_RESEND_API_KEY=your-resend-api-key
-VITE_FROM_EMAIL=noreply@send.yourdomain.com
 ```
 
-**Note**: The service role key is required for admin features like employee invitations. Get it from Supabase Dashboard → Settings → API.
+**Important**: Do not place service role or email-provider secrets in `VITE_` variables.
+Set privileged values as Supabase Edge Function secrets instead:
+
+```bash
+supabase secrets set RESEND_API_KEY=...
+supabase secrets set FROM_EMAIL=noreply@send.yourdomain.com
+supabase secrets set APP_URL=https://orgchart.aveyo.com
+```
 
 ### Database Setup
 
@@ -164,6 +168,8 @@ Deploy the `dist` folder to your hosting provider.
 - `VITE_SUPABASE_URL`: Your Supabase project URL
 - `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
 - `VITE_APP_URL`: Your application URL (for email links)
+- `RESEND_API_KEY` (Edge secret): Resend API key, never client-side
+- `FROM_EMAIL` (Edge secret): Verified sender address
 
 ## License
 

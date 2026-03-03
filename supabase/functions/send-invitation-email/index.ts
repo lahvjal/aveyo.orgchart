@@ -4,21 +4,84 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'noreply@send.aveyo.com'
 
-// Supabase automatically provides these
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
-const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 interface InvitationEmailRequest {
-  userId: string // User ID of the requester (for admin verification)
-  email: string
-  fullName: string
-  jobTitle: string
-  invitedBy: string
-  magicLink: string
+  targetUserId: string
+  redirectTo?: string
+}
+
+type RequesterProfile = {
+  id: string
+  full_name: string | null
+  is_admin: boolean | null
+  is_manager: boolean | null
+  is_super_admin: boolean | null
+}
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+  })
+}
+
+function getBearerToken(req: Request): string | null {
+  const authHeader = req.headers.get('authorization') ?? ''
+  if (!authHeader.toLowerCase().startsWith('bearer ')) return null
+  const token = authHeader.slice('bearer '.length).trim()
+  return token || null
+}
+
+function sanitizeRedirectTo(raw: unknown): string {
+  const appUrl = (Deno.env.get('APP_URL') || 'https://orgchart.aveyo.com').replace(/\/+$/, '')
+  const fallback = `${appUrl}/onboarding`
+  if (typeof raw !== 'string' || !raw.trim()) return fallback
+
+  try {
+    const base = new URL(appUrl)
+    const candidate = new URL(raw, appUrl)
+    if (candidate.origin !== base.origin) return fallback
+    return candidate.toString()
+  } catch {
+    return fallback
+  }
+}
+
+async function getManagedUserIds(supabaseAdmin: ReturnType<typeof createClient>, managerId: string) {
+  const managed = new Set<string>()
+  let frontier: string[] = [managerId]
+
+  while (frontier.length > 0) {
+    const batch = frontier.slice(0, 200)
+    frontier = frontier.slice(200)
+
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id')
+      .in('manager_id', batch)
+
+    if (error) throw error
+
+    for (const row of data ?? []) {
+      if (!managed.has(row.id)) {
+        managed.add(row.id)
+        frontier.push(row.id)
+      }
+    }
+  }
+
+  return managed
+}
+
+function logEvent(event: string, details: Record<string, unknown>) {
+  console.log(JSON.stringify({ event, ts: new Date().toISOString(), ...details }))
 }
 
 serve(async (req) => {
+  const requestId = crypto.randomUUID()
+
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', {
@@ -30,68 +93,96 @@ serve(async (req) => {
     })
   }
 
-  try {
-    console.log('Edge Function: Request received')
+  if (req.method !== 'POST') {
+    return jsonResponse({ error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED', requestId }, 405)
+  }
 
+  try {
     if (!RESEND_API_KEY) {
-      console.error('Edge Function: RESEND_API_KEY is not configured')
-      return new Response(
-        JSON.stringify({ error: 'Email service is not configured. Please set the RESEND_API_KEY secret.' }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-        }
+      return jsonResponse(
+        { error: 'Email service is not configured. Please set RESEND_API_KEY.', code: 'EMAIL_NOT_CONFIGURED', requestId },
+        500
       )
     }
 
-    // Parse request body first to get userId
-    const requestData: InvitationEmailRequest = await req.json()
-    const { userId, email, fullName, jobTitle, invitedBy, magicLink } = requestData
-    
-    console.log('Edge Function: Verifying user is admin:', userId)
-    
-    // Use service role to verify the user is an admin
+    const token = getBearerToken(req)
+    if (!token) {
+      return jsonResponse({ error: 'Invalid JWT', code: 'INVALID_JWT', requestId }, 401)
+    }
+
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-    
-    const { data: profile, error: profileError } = await supabaseAdmin
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token)
+    if (authError || !authData?.user) {
+      logEvent('invite_auth_failed', { requestId, error: authError?.message ?? null })
+      return jsonResponse({ error: 'Invalid JWT', code: 'INVALID_JWT', requestId }, 401)
+    }
+
+    const actorId = authData.user.id
+    const { data: requester, error: requesterError } = await supabaseAdmin
       .from('profiles')
-      .select('is_admin, is_manager')
-      .eq('id', userId)
+      .select('id, full_name, is_admin, is_manager, is_super_admin')
+      .eq('id', actorId)
+      .single<RequesterProfile>()
+
+    if (requesterError || !requester) {
+      return jsonResponse(
+        { error: 'Could not verify requester identity', code: 'REQUESTER_PROFILE_NOT_FOUND', requestId },
+        403
+      )
+    }
+
+    const isAdmin = Boolean(requester.is_admin || requester.is_super_admin)
+    const isManager = Boolean(requester.is_manager)
+    if (!isAdmin && !isManager) {
+      return jsonResponse({ error: 'Admin or manager access required', code: 'AUTHZ_ROLE_DENIED', requestId }, 403)
+    }
+
+    const requestData: InvitationEmailRequest = await req.json()
+    const { targetUserId } = requestData
+    if (!targetUserId) {
+      return jsonResponse({ error: 'targetUserId is required', code: 'TARGET_REQUIRED', requestId }, 400)
+    }
+
+    const { data: targetProfile, error: targetProfileError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, email, full_name, job_title')
+      .eq('id', targetUserId)
       .single()
 
-    if (profileError) {
-      console.error('Edge Function: Error fetching profile:', profileError.message)
-      return new Response(
-        JSON.stringify({ error: 'Error verifying admin status', details: profileError.message }),
-        { 
-          status: 500, 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          } 
-        }
-      )
+    if (targetProfileError || !targetProfile) {
+      return jsonResponse({ error: 'Target user not found', code: 'TARGET_NOT_FOUND', requestId }, 404)
     }
 
-    console.log('Edge Function: Profile fetched:', profile)
-
-    if (!profile?.is_admin && !profile?.is_manager) {
-      console.error('Edge Function: User is not an admin or manager')
-      return new Response(
-        JSON.stringify({ error: 'Admin or manager access required' }),
-        { 
-          status: 403, 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          } 
-        }
-      )
+    if (!isAdmin && isManager) {
+      const teamIds = await getManagedUserIds(supabaseAdmin, actorId)
+      if (!teamIds.has(targetUserId)) {
+        return jsonResponse(
+          { error: 'Managers can only invite users in their own team', code: 'AUTHZ_SCOPE_DENIED', requestId },
+          403
+        )
+      }
     }
 
-    console.log('Edge Function: Access verified, sending email')
+    const redirectTo = sanitizeRedirectTo(requestData.redirectTo)
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'magiclink',
+      email: targetProfile.email,
+      options: { redirectTo },
+    })
 
-    console.log('Sending invitation email to:', email)
+    const magicLink = linkData?.properties?.action_link
+    if (linkError || !magicLink) {
+      logEvent('invite_link_generation_failed', {
+        requestId,
+        actorId,
+        targetUserId,
+        error: linkError?.message ?? null,
+      })
+      return jsonResponse({ error: 'Failed to generate invitation link', code: 'GENERATE_LINK_FAILED', requestId }, 400)
+    }
+
+    const invitedBy = requester.full_name || 'Administrator'
 
     // Use a hosted PNG logo for email client compatibility.
     // Gmail and most email clients block data: URIs and don't support SVG.
@@ -124,13 +215,13 @@ serve(async (req) => {
               <h1>You've been invited to Aveyo's OrgChart App</h1>
             </div>
             <div class="content">
-              <h2 style="color: #111; margin-top: 0;">Hi ${fullName},</h2>
+              <h2 style="color: #111; margin-top: 0;">Hi ${targetProfile.full_name},</h2>
               
-              <p>${invitedBy} has invited you to join the organization chart as <strong>${jobTitle}</strong>.</p>
+              <p>${invitedBy} has invited you to join the organization chart as <strong>${targetProfile.job_title}</strong>.</p>
 
               <div class="info-box">
                 <p style="margin: 0 0 8px;"><strong>Your account details</strong></p>
-                <p style="margin: 0;">Email: ${email}<br>Job title: ${jobTitle}</p>
+                <p style="margin: 0;">Email: ${targetProfile.email}<br>Job title: ${targetProfile.job_title}</p>
               </div>
 
               <p>Click the button below to access your account and set up your password:</p>
@@ -169,51 +260,24 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: FROM_EMAIL,
-        to: [email],
-        subject: `You've been invited to Aveyo's OrgChart App – ${jobTitle}`,
+        to: [targetProfile.email],
+        subject: `You've been invited to Aveyo's OrgChart App – ${targetProfile.job_title}`,
         html: emailHtml,
       }),
     })
 
     if (!resendResponse.ok) {
       const error = await resendResponse.text()
-      console.error('Resend API error:', error)
-      return new Response(
-        JSON.stringify({ error: 'Failed to send email', details: error }),
-        { 
-          status: 500, 
-          headers: { 
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
-          } 
-        }
-      )
+      logEvent('invite_email_send_failed', { requestId, actorId, targetUserId, error })
+      return jsonResponse({ error: 'Failed to send email', code: 'EMAIL_SEND_FAILED', requestId }, 500)
     }
 
     const resendData = await resendResponse.json()
-    console.log('Email sent successfully:', resendData)
-
-    return new Response(
-      JSON.stringify({ success: true, data: resendData }),
-      {
-        status: 200,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    )
+    logEvent('invite_email_sent', { requestId, actorId, targetUserId, resendId: resendData?.id ?? null })
+    return jsonResponse({ success: true, data: resendData })
   } catch (error) {
-    console.error('Error in send-invitation-email function:', error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      {
-        status: 500,
-        headers: {
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-        },
-      }
-    )
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    logEvent('invite_unexpected_error', { requestId, error: message })
+    return jsonResponse({ error: message, code: 'UNEXPECTED_ERROR', requestId }, 500)
   }
 })

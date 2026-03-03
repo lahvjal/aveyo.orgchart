@@ -7,6 +7,11 @@ interface RemoveEmployeeResult {
   error?: string
 }
 
+interface DeleteUserResponse {
+  success?: boolean
+  error?: string
+}
+
 /**
  * Hook for removing employees (admin only)
  *
@@ -34,7 +39,7 @@ export function useRemoveEmployee() {
       }
 
       try {
-        const { data, error } = await invokeAdminUserOps({
+        const { data, error } = await invokeAdminUserOps<DeleteUserResponse>({
           action: 'deleteUser',
           userId: currentUser.id,
           targetUserId: userId,
@@ -48,11 +53,11 @@ export function useRemoveEmployee() {
 
         console.log('useRemoveEmployee: Successfully removed employee')
         return { success: true }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('useRemoveEmployee: Unexpected error:', error)
         return {
           success: false,
-          error: error.message || 'An unexpected error occurred',
+          error: error instanceof Error ? error.message : 'An unexpected error occurred',
         }
       }
     },

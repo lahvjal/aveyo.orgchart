@@ -7,7 +7,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
 const FROM_EMAIL = Deno.env.get('FROM_EMAIL') || 'noreply@send.aveyo.com'
-const APP_URL = Deno.env.get('APP_URL') || ''
+const APP_URL = Deno.env.get('APP_URL') || 'https://orgchart.aveyo.com'
+const RESET_ALLOWLIST = (Deno.env.get('PASSWORD_RESET_REDIRECT_ALLOWLIST') || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
@@ -17,66 +21,135 @@ interface PasswordResetRequest {
   redirectTo?: string
 }
 
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000
+const RATE_LIMIT_MAX = 5
+const rateLimitBuckets = new Map<string, number[]>()
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+function genericOkResponse() {
+  return new Response(
+    JSON.stringify({
+      success: true,
+      message: 'If an account exists for that email, a password reset link will be sent.',
+    }),
+    { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+  )
+}
+
+function normalizeEmail(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const email = raw.trim().toLowerCase()
+  if (!email || !email.includes('@')) return null
+  return email
+}
+
+function withinRateLimit(key: string): boolean {
+  const now = Date.now()
+  const existing = rateLimitBuckets.get(key) ?? []
+  const recent = existing.filter((timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS)
+
+  if (recent.length >= RATE_LIMIT_MAX) {
+    rateLimitBuckets.set(key, recent)
+    return false
+  }
+
+  recent.push(now)
+  rateLimitBuckets.set(key, recent)
+  return true
+}
+
+function resolveResetRedirect(redirectTo: unknown): string {
+  const normalizedAppUrl = APP_URL.replace(/\/+$/, '')
+  const defaultRedirect = `${normalizedAppUrl}/reset-password`
+
+  if (typeof redirectTo !== 'string' || !redirectTo.trim()) {
+    return defaultRedirect
+  }
+
+  try {
+    const allowlistedOrigins = new Set([
+      new URL(normalizedAppUrl).origin,
+      ...RESET_ALLOWLIST.map((item) => new URL(item).origin),
+    ])
+
+    const candidate = new URL(redirectTo, normalizedAppUrl)
+    if (!allowlistedOrigins.has(candidate.origin)) {
+      return defaultRedirect
+    }
+
+    if (!candidate.pathname.endsWith('/reset-password')) {
+      candidate.pathname = '/reset-password'
+      candidate.search = ''
+      candidate.hash = ''
+    }
+
+    return candidate.toString()
+  } catch {
+    return defaultRedirect
+  }
+}
+
+function logEvent(event: string, details: Record<string, unknown>) {
+  console.log(JSON.stringify({ event, ts: new Date().toISOString(), ...details }))
+}
+
 serve(async (req) => {
+  const requestId = crypto.randomUUID()
+
   if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    })
+    return new Response('ok', { headers: corsHeaders })
   }
 
   try {
     if (req.method !== 'POST') {
       return new Response(
         JSON.stringify({ error: 'Method not allowed' }),
-        { status: 405, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
+        { status: 405, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       )
     }
 
     const { email, redirectTo }: PasswordResetRequest = await req.json()
-    if (!email || typeof email !== 'string') {
-      return new Response(
-        JSON.stringify({ error: 'Email is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-      )
+    const normalizedEmail = normalizeEmail(email)
+    if (!normalizedEmail) {
+      return genericOkResponse()
     }
 
-    let base = redirectTo || APP_URL
-    if (!base) {
-      return new Response(
-        JSON.stringify({ error: 'APP_URL or redirectTo is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-      )
+    const ip = (req.headers.get('x-forwarded-for') || 'unknown').split(',')[0].trim()
+    const rateLimitKey = `${ip}:${normalizedEmail}`
+    if (!withinRateLimit(rateLimitKey)) {
+      logEvent('password_reset_rate_limited', { requestId, ip })
+      return genericOkResponse()
     }
-    base = base.replace(/\/+$/, '')
-    const resetRedirectTo = base.endsWith('/reset-password') ? base : `${base}/reset-password`
+
+    const resetRedirectTo = resolveResetRedirect(redirectTo)
 
     const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
     const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
       type: 'recovery',
-      email: email.trim(),
+      email: normalizedEmail,
       options: { redirectTo: resetRedirectTo },
     })
 
     if (linkError || !linkData.properties?.action_link) {
-      console.error('generateLink error:', linkError)
-      return new Response(
-        JSON.stringify({ success: false, error: 'Could not create reset link' }),
-        { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-      )
+      logEvent('password_reset_link_generation_failed', {
+        requestId,
+        ip,
+        error: linkError?.message ?? null,
+      })
+      return genericOkResponse()
     }
 
     const resetLink = linkData.properties.action_link
 
     if (!RESEND_API_KEY) {
-      return new Response(
-        JSON.stringify({ error: 'Resend not configured' }),
-        { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-      )
+      logEvent('password_reset_email_not_configured', { requestId, ip })
+      return genericOkResponse()
     }
 
     const emailHtml = `
@@ -121,7 +194,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: FROM_EMAIL,
-        to: [email.trim()],
+        to: [normalizedEmail],
         subject: 'Reset your password',
         html: emailHtml,
       }),
@@ -129,23 +202,16 @@ serve(async (req) => {
 
     if (!resendResponse.ok) {
       const errText = await resendResponse.text()
-      console.error('Resend API error:', errText)
-      return new Response(
-        JSON.stringify({ error: 'Failed to send email', details: errText }),
-        { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-      )
+      logEvent('password_reset_email_send_failed', { requestId, ip, error: errText })
+      return genericOkResponse()
     }
 
-    const resendData = await resendResponse.json()
-    return new Response(
-      JSON.stringify({ success: true, data: resendData }),
-      { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-    )
+    await resendResponse.json()
+    logEvent('password_reset_email_sent', { requestId, ip })
+    return genericOkResponse()
   } catch (error) {
-    console.error('send-password-reset-email error:', error)
-    return new Response(
-      JSON.stringify({ error: error?.message ?? 'Internal server error' }),
-      { status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } }
-    )
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    logEvent('password_reset_unexpected_error', { requestId, error: message })
+    return genericOkResponse()
   }
 })

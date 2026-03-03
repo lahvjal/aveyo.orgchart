@@ -2,19 +2,17 @@
 
 ## Setup (5 minutes)
 
-### 1. Add Service Role Key
+### 1. Configure Edge Function Secrets
 
-Get your service role key from Supabase Dashboard:
-- Go to your Supabase project
-- Settings → API
-- Copy "service_role" key (the secret one)
+Set invitation/email secrets in Supabase (server-side only):
 
-Add to `.env.local`:
-```env
-VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```bash
+supabase secrets set RESEND_API_KEY=...
+supabase secrets set FROM_EMAIL=noreply@send.yourdomain.com
+supabase secrets set APP_URL=http://localhost:5173
 ```
 
-⚠️ **IMPORTANT**: Never commit this to Git! It's already in `.gitignore` via `.env.local`.
+Do not put service-role or Resend secrets in `.env.local` or `VITE_` variables.
 
 ### 2. Restart Dev Server
 
@@ -57,9 +55,9 @@ npm run dev
 ## Troubleshooting
 
 ### "Admin features are not configured"
-- Service role key not set or incorrect
-- Check `.env.local` file
-- Restart dev server after adding key
+- Edge function secret missing or invalid
+- Check `supabase secrets list`
+- Redeploy the edge functions after updating secrets
 
 ### "This email address is already registered"
 - User already exists in system
@@ -98,14 +96,14 @@ If any step fails, the error will be logged and shown to admin.
 # Supabase (required)
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGci...
-VITE_SUPABASE_SERVICE_ROLE_KEY=eyJhbGci...  # NEW! For invitations
 
 # App (required)
 VITE_APP_URL=http://localhost:5173
 
-# Resend (required for emails)
-VITE_RESEND_API_KEY=re_...
-VITE_FROM_EMAIL=noreply@send.yourdomain.com
+# Edge-function secrets (set via Supabase CLI, not .env.local)
+# RESEND_API_KEY=...
+# FROM_EMAIL=noreply@send.yourdomain.com
+# APP_URL=http://localhost:5173
 ```
 
 ## Files You Can Ignore
@@ -119,6 +117,6 @@ These were created/modified automatically:
 
 ## That's It! 🎉
 
-The feature is fully implemented and ready to use. Just add the service role key and you're good to go!
+The feature is fully implemented and ready to use. Configure edge-function secrets and deploy.
 
 For detailed documentation, see `ADMIN_INVITATION_FEATURE.md`.

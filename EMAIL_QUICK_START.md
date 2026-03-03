@@ -73,12 +73,12 @@ if (shouldSendEmail) {
 
 ## Production Deployment
 
-When deploying, add these environment variables:
+Configure server-side edge secrets (not client env vars):
 
 ```bash
-VITE_RESEND_API_KEY=re_zJ12TZbm_Gjs6y2ewcCFJtZoSjEnsoVWv
-VITE_FROM_EMAIL=noreply@send.aveyo.com
-VITE_APP_URL=https://your-domain.com
+supabase secrets set RESEND_API_KEY=...
+supabase secrets set FROM_EMAIL=noreply@send.yourdomain.com
+supabase secrets set APP_URL=https://your-domain.com
 ```
 
 ## Troubleshooting
@@ -89,9 +89,9 @@ VITE_APP_URL=https://your-domain.com
 3. Check browser console for errors
 
 ### Wrong from address
-Update in `.env.local`:
-```
-VITE_FROM_EMAIL=custom@send.aveyo.com
+Update edge-function secret and redeploy:
+```bash
+supabase secrets set FROM_EMAIL=custom@send.aveyo.com
 ```
 
 ### Want to disable notifications

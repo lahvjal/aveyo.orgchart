@@ -6,12 +6,12 @@ The admin employee invitation system has been successfully implemented. Administ
 
 ## What Was Implemented
 
-### 1. Supabase Admin Client (`src/lib/supabaseAdmin.ts`)
+### 1. Server-Side Admin Gateway (`supabase/functions/admin-user-ops/index.ts`)
 
-Created a service role client for admin operations:
-- Uses `VITE_SUPABASE_SERVICE_ROLE_KEY` environment variable
-- Bypasses RLS for privileged operations
-- Only accessible from admin-protected contexts
+Privileged operations are handled by an edge function:
+- Uses service role in Supabase edge runtime only
+- Enforces bearer-token identity checks
+- Applies role/scope checks server-side
 - Handles user creation and magic link generation
 
 ### 2. Invitation Email Template (`src/lib/notifications.ts`)
@@ -54,10 +54,17 @@ Updated admin panel:
 - Button hidden when editing a user
 - Auto-refreshes user list after successful invitation
 
-### 6. Environment Configuration (`.env.example`)
+### 6. Environment Configuration
 
-Added required environment variable:
-- `VITE_SUPABASE_SERVICE_ROLE_KEY` - Service role key from Supabase dashboard
+Client environment (`.env.local`) should only include browser-safe values:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_APP_URL`
+
+Privileged secrets must be configured as edge-function secrets:
+- `RESEND_API_KEY`
+- `FROM_EMAIL`
+- `APP_URL`
 
 ## How It Works
 
@@ -91,11 +98,11 @@ Admin → Click "Invite Employee" → Fill Form → Submit
   ↓
 useInviteEmployee Hook
   ↓
-supabaseAdmin.auth.admin.createUser()
+admin-user-ops (edge) → auth.admin.createUser()
   → Creates auth.users record
   → handle_new_user trigger creates profile
   ↓
-supabaseAdmin.auth.admin.generateLink()
+admin-user-ops (edge) → auth.admin.generateLink()
   → Returns magic link URL
   ↓
 sendEmployeeInvitationEmail()
@@ -106,7 +113,7 @@ Employee receives email → Clicks link → Auto-login → Dashboard
 
 ## Security Features
 
-1. **Service Role Key Protection**: Only used server-side, with warning comments
+1. **Service Role Key Protection**: Only used server-side in edge secrets
 2. **Admin Check**: Hook verifies user is logged in before execution
 3. **Magic Link Expiration**: 24-hour validity (Supabase default)
 4. **Email Validation**: Client-side regex validation
@@ -115,17 +122,15 @@ Employee receives email → Clicks link → Auto-login → Dashboard
 
 ## Setup Instructions
 
-### 1. Add Service Role Key
+### 1. Set Edge Function Secrets
 
-Add to `.env.local`:
-```env
-VITE_SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+```bash
+supabase secrets set RESEND_API_KEY=...
+supabase secrets set FROM_EMAIL=noreply@send.yourdomain.com
+supabase secrets set APP_URL=https://orgchart.aveyo.com
 ```
 
-Get the service role key from:
-Supabase Dashboard → Settings → API → Service Role Key (secret)
-
-⚠️ **WARNING**: Never commit this key to version control!
+Do not commit secret values to the repository.
 
 ### 2. Test the Feature
 
@@ -145,13 +150,13 @@ Supabase Dashboard → Settings → API → Service Role Key (secret)
 ### 3. Verify Email Delivery
 
 The invitation email will be sent via Resend. Ensure:
-- `VITE_RESEND_API_KEY` is configured
-- `VITE_FROM_EMAIL` matches your verified domain
+- `RESEND_API_KEY` edge secret is configured
+- `FROM_EMAIL` edge secret matches your verified domain
 - Check Resend dashboard for delivery logs
 
 ## Files Created
 
-1. **src/lib/supabaseAdmin.ts** - Admin Supabase client with service role
+1. **src/lib/supabaseAdmin.ts** - Legacy placeholder (no service key use)
 2. **src/hooks/useInviteEmployee.ts** - Invitation mutation hook
 3. **src/components/admin/AddEmployeeDialog.tsx** - Invitation dialog UI
 
@@ -159,7 +164,7 @@ The invitation email will be sent via Resend. Ensure:
 
 1. **src/lib/notifications.ts** - Added `sendEmployeeInvitationEmail()`
 2. **src/components/admin/UserManagement.tsx** - Added invite button and dialog
-3. **.env.example** - Documented service role key requirement
+3. **.env.example** - Documents client-safe variables only
 
 ## Testing Checklist
 
@@ -198,7 +203,7 @@ useInviteEmployee: Success, profiles query invalidated
 
 User-friendly error messages for common scenarios:
 
-- "Admin features are not configured" - Service role key missing
+- "Admin features are not configured" - Edge secret missing/invalid
 - "You must be logged in to invite employees" - Not authenticated
 - "This email address is already registered" - Duplicate user
 - "User created but failed to generate invitation link" - Link generation failed
@@ -219,7 +224,7 @@ Possible improvements:
 
 If you encounter issues:
 1. Check console logs for detailed error messages
-2. Verify service role key is correctly set
-3. Verify Resend API key is configured
+2. Verify edge-function secrets are correctly set
+3. Verify Resend provider settings are configured
 4. Check Supabase Auth logs in dashboard
 5. Check Resend delivery logs in dashboard

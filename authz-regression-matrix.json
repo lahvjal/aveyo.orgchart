@@ -1,0 +1,79 @@
+{
+  "roles": [
+    "anon",
+    "authenticated",
+    "manager",
+    "admin",
+    "super_admin",
+    "process_editor"
+  ],
+  "sql": {
+    "profiles_self_update_privileged_columns": {
+      "anon": "deny",
+      "authenticated": "deny",
+      "manager": "deny",
+      "admin": "allow",
+      "super_admin": "allow",
+      "process_editor": "deny"
+    },
+    "organization_settings_write": {
+      "anon": "deny",
+      "authenticated": "deny",
+      "manager": "deny",
+      "admin": "allow",
+      "super_admin": "allow",
+      "process_editor": "deny"
+    },
+    "public_process_access_without_slug_capability": {
+      "anon": "deny",
+      "authenticated": "deny",
+      "manager": "deny",
+      "admin": "deny",
+      "super_admin": "deny",
+      "process_editor": "deny"
+    },
+    "terminate_employee_execute_direct_rpc": {
+      "anon": "deny",
+      "authenticated": "deny",
+      "manager": "deny",
+      "admin": "deny",
+      "super_admin": "deny",
+      "process_editor": "deny"
+    }
+  },
+  "edge": {
+    "admin_user_ops_update_profile_manager_privileged_fields": {
+      "anon": "deny",
+      "authenticated": "deny",
+      "manager": "deny",
+      "admin": "allow",
+      "super_admin": "allow",
+      "process_editor": "deny"
+    },
+    "admin_user_ops_list_users_manager_out_of_scope": {
+      "anon": "deny",
+      "authenticated": "deny",
+      "manager": "deny",
+      "admin": "allow",
+      "super_admin": "allow",
+      "process_editor": "deny"
+    },
+    "send_invitation_email_body_spoofed_userid": {
+      "anon": "deny",
+      "authenticated": "deny",
+      "manager": "deny",
+      "admin": "deny",
+      "super_admin": "deny",
+      "process_editor": "deny"
+    }
+  },
+  "ui": {
+    "admin_error_mapping_authz_scope_denied": {
+      "expectedCode": "AUTHZ_SCOPE_DENIED",
+      "expectedMessageContains": "permission"
+    },
+    "protected_route_terminated_account_blocked": {
+      "expectedMessageContains": "Account Archived"
+    }
+  }
+}

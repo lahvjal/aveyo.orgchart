@@ -574,6 +574,14 @@ export interface Database {
           updated_at: string
         }[]
       }
+      get_public_org_share_bundle: {
+        Args: { p_slug: string }
+        Returns: Json
+      }
+      get_public_process_bundle: {
+        Args: { p_slug: string }
+        Returns: Json
+      }
       get_manager_team: {
         Args: { p_manager_id: string }
         Returns: {
@@ -602,6 +610,10 @@ export interface Database {
           p_process_id: string
           p_user_id: string
         }
+        Returns: boolean
+      }
+      is_admin_like: {
+        Args: { p_user_id: string }
         Returns: boolean
       }
       acquire_process_edit_lock: {

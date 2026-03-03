@@ -1,18 +1,16 @@
 import { useParams } from 'react-router-dom'
-import { useShareLink } from '../lib/queries'
-import { useProfileBranch } from '../hooks/useProfile'
+import { usePublicOrgShareBundle } from '../lib/queries'
 import { OrgChartCanvas } from '../components/org-chart/OrgChartCanvas'
 import { Card } from '../components/ui/card'
 import { AlertCircle } from 'lucide-react'
 
 export default function PublicShare() {
   const { slug } = useParams<{ slug: string }>()
-  const { data: shareLink, isLoading: linkLoading, error: linkError } = useShareLink(slug!)
-  const { data: profiles, isLoading: profilesLoading } = useProfileBranch(
-    shareLink?.root_profile_id
-  )
+  const { data: bundle, isLoading: bundleLoading, error: bundleError } = usePublicOrgShareBundle(slug!)
+  const shareLink = bundle?.share_link
+  const profiles = bundle?.profiles ?? []
 
-  if (linkLoading || profilesLoading) {
+  if (bundleLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <div className="text-center">
@@ -23,7 +21,7 @@ export default function PublicShare() {
     )
   }
 
-  if (linkError || !shareLink) {
+  if (bundleError || !shareLink) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
         <Card className="p-8 max-w-md w-full text-center">

@@ -49,10 +49,12 @@ export const EmployeeNode = memo(({ data }: NodeProps<EmployeeNodeData>) => {
           </Badge>
         )}
 
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Mail className="h-3 w-3 flex-shrink-0" />
-          <span className="truncate">{profile.email}</span>
-        </div>
+        {profile.email && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Mail className="h-3 w-3 flex-shrink-0" />
+            <span className="truncate">{profile.email}</span>
+          </div>
+        )}
       </div>
 
       <Handle type="source" position={Position.Bottom} className="!bg-primary" />

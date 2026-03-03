@@ -26,29 +26,19 @@ async function invokeNotificationEmail(type: string, payload: Record<string, unk
 
 export async function sendWelcomeEmail(profile: Profile) {
   return invokeNotificationEmail('welcome', {
-    profile: {
-      email: profile.email,
-      full_name: profile.full_name,
-      job_title: profile.job_title,
-      start_date: profile.start_date,
-      department: profile.department ? { name: profile.department.name } : null,
-    },
+    targetProfileId: profile.id,
   })
 }
 
 export async function sendProfileUpdateEmail(
   profile: Profile,
-  changedBy: { full_name: string; email: string },
-  isOwnUpdate: boolean
+  _changedBy: { full_name: string; email: string },
+  _isOwnUpdate: boolean
 ) {
+  void _changedBy
+  void _isOwnUpdate
   return invokeNotificationEmail('profileUpdate', {
-    profile: {
-      email: profile.email,
-      full_name: profile.full_name,
-      manager: profile.manager ? { email: profile.manager.email } : null,
-    },
-    changedBy,
-    isOwnUpdate,
+    targetProfileId: profile.id,
   })
 }
 
@@ -58,13 +48,9 @@ export async function sendManagerChangeEmail(
   oldManager: Profile | null
 ) {
   return invokeNotificationEmail('managerChange', {
-    profile: { email: profile.email, full_name: profile.full_name },
-    newManager: newManager
-      ? { email: newManager.email, full_name: newManager.full_name, job_title: newManager.job_title }
-      : null,
-    oldManager: oldManager
-      ? { email: oldManager.email, full_name: oldManager.full_name, job_title: oldManager.job_title }
-      : null,
+    targetProfileId: profile.id,
+    newManagerId: newManager?.id ?? null,
+    oldManagerId: oldManager?.id ?? null,
   })
 }
 
@@ -74,7 +60,7 @@ export async function sendDepartmentChangeEmail(
   newDepartmentName: string
 ) {
   return invokeNotificationEmail('departmentChange', {
-    profile: { email: profile.email, full_name: profile.full_name },
+    targetProfileId: profile.id,
     oldDepartmentName,
     newDepartmentName,
   })
@@ -83,11 +69,8 @@ export async function sendDepartmentChangeEmail(
 // ── Invitation email (already uses edge function) ────────────────────────────
 
 export async function sendEmployeeInvitationEmail(
-  email: string,
-  fullName: string,
-  jobTitle: string,
-  invitedBy: string,
-  magicLink: string
+  targetUserId: string,
+  redirectTo?: string
 ) {
   console.log('sendEmployeeInvitationEmail: Calling Edge Function')
 
@@ -102,11 +85,8 @@ export async function sendEmployeeInvitationEmail(
     const { data, error } = await supabase.functions.invoke('send-invitation-email', {
       body: {
         userId: user.id,
-        email,
-        fullName,
-        jobTitle,
-        invitedBy,
-        magicLink,
+        targetUserId,
+        redirectTo,
       },
     })
 

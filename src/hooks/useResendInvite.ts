@@ -10,6 +10,12 @@ interface ResendInviteResult {
   error?: string
 }
 
+interface ListUsersResponse {
+  success?: boolean
+  error?: string
+  users?: Array<{ id: string; last_sign_in_at: string | null }>
+}
+
 /**
  * Hook for resending invitations to employees who haven't logged in yet
  */
@@ -26,46 +32,15 @@ export function useResendInvite() {
         return { success: false, error: 'You must be logged in to resend invitations' }
       }
 
-      // Get current user's profile for the "invited by" name
-      const { data: currentProfile } = await supabase
-        .from('profiles')
-        .select('full_name')
-        .eq('id', currentUser.id)
-        .single()
-
-      const invitedByName = (currentProfile as any)?.full_name || 'Administrator'
-
       try {
-        // Generate a new magic link via edge function
-        console.log('useResendInvite: Generating new magic link')
+        // Edge function handles server-side link generation and email dispatch.
         const appUrl = import.meta.env.VITE_APP_URL || window.location.origin
-
-        const { data: linkData, error: linkError } = await invokeAdminUserOps(
-          {
-            action: 'generateLink',
-            userId: currentUser.id,
-            email: profile.email,
-            linkType: 'magiclink',
-            redirectTo: `${appUrl}/onboarding`,
-          }
-        )
-
-        if (linkError || !linkData?.success || !linkData?.actionLink) {
-          console.error('useResendInvite: Error generating magic link:', linkData?.error || linkError)
-          return { success: false, error: 'Failed to generate invitation link' }
-        }
-
-        const magicLink = linkData.actionLink
-        console.log('useResendInvite: Magic link generated successfully')
 
         // Send invitation email
         console.log('useResendInvite: Sending invitation email')
         const emailResult = await sendEmployeeInvitationEmail(
-          profile.email,
-          profile.full_name,
-          profile.job_title,
-          invitedByName,
-          magicLink
+          profile.id,
+          `${appUrl}/onboarding`
         )
 
         if (!emailResult.success) {
@@ -107,13 +82,17 @@ export function useUserAuthStatus() {
       }
 
       try {
-        const { data, error } = await invokeAdminUserOps({
+        const { data, error } = await invokeAdminUserOps<ListUsersResponse>({
           action: 'listUsers',
           userId: currentUser.id,
         })
 
         if (error || !data?.success) {
           console.error('useUserAuthStatus: Error fetching users:', data?.error || error)
+          return {}
+        }
+
+        if (!data.users) {
           return {}
         }
 

@@ -1,0 +1,50 @@
+name: Authz Regression
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  app-authz-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run authz regression tests
+        run: npm run test
+
+  sql-authz-tests:
+    if: ${{ secrets.DATABASE_URL != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install psql client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run SQL authz checks
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run test:sql-authz
