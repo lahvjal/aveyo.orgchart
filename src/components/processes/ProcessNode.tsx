@@ -124,12 +124,16 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
     if (e.key === 'Enter' || e.key === 'Escape') commitDesc()
   }
 
+  const isActiveProfile = (profile: { employment_status?: string | null }) =>
+    (profile.employment_status ?? 'active') === 'active'
+
   // Derive objects from ID arrays using context data
+  const activeProfiles = allProfiles.filter(isActiveProfile)
   const taggedProfiles = allProfiles.filter((p) => taggedProfileIds.includes(p.id))
   const taggedDepartments = allDepartments.filter((d) => taggedDepartmentIds.includes(d.id))
   const untaggedDepartments = allDepartments.filter((d) => !taggedDepartmentIds.includes(d.id))
 
-  const filteredProfiles = allProfiles.filter((p) => {
+  const filteredProfiles = activeProfiles.filter((p) => {
     if (taggedProfileIds.includes(p.id)) return false
     if (!search.trim()) return true
     const q = search.toLowerCase()
@@ -373,14 +377,24 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
             <div className="flex items-center flex-wrap gap-1 min-h-[24px]">
               {taggedProfiles.map((profile) => {
                 const displayName = profile.preferred_name || profile.full_name
+                const isArchived = !isActiveProfile(profile)
                 return (
-                  <div key={profile.id} className="relative group/tag" title={`${displayName} — ${profile.job_title}`}>
-                    <Avatar className="h-6 w-6 ring-2 ring-white">
+                  <div
+                    key={profile.id}
+                    className={cn('relative group/tag', isArchived && 'opacity-75')}
+                    title={`${displayName} — ${profile.job_title}${isArchived ? ' (Archived)' : ''}`}
+                  >
+                    <Avatar className={cn('h-6 w-6 ring-2 ring-white', isArchived && 'ring-amber-300')}>
                       {profile.profile_photo_url && (
                         <AvatarImage src={profile.profile_photo_url} alt={displayName} />
                       )}
                       <AvatarFallback className="text-[9px]">{getInitials(profile.full_name)}</AvatarFallback>
                     </Avatar>
+                    {isArchived && (
+                      <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded border border-amber-300 bg-amber-100 px-1 text-[8px] font-medium text-amber-700">
+                        Archived
+                      </span>
+                    )}
                     {isEditing && (
                       <button
                         onClick={() => handleUntag(profile.id)}
@@ -423,7 +437,11 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
                       <div className="max-h-44 overflow-y-auto nowheel">
                         {filteredProfiles.length === 0 ? (
                           <p className="text-xs text-gray-400 text-center py-4 px-2">
-                            {search ? 'No matches found' : 'All employees tagged'}
+                            {search
+                              ? 'No matches found'
+                              : activeProfiles.length === 0
+                                ? 'No active employees available'
+                                : 'All active employees tagged'}
                           </p>
                         ) : (
                           filteredProfiles.map((profile) => (

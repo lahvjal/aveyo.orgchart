@@ -3,9 +3,20 @@ import { supabase } from '../lib/supabase'
 import type { Profile } from '../types'
 import { sendProfileUpdateEmail, sendManagerChangeEmail, sendDepartmentChangeEmail } from '../lib/notifications'
 
-export function useProfile(userId?: string) {
+export type EmploymentStatusFilter = 'active' | 'terminated' | 'all'
+
+function filterProfilesByStatus(profiles: Profile[], status: EmploymentStatusFilter): Profile[] {
+  if (status === 'all') return profiles
+  return profiles.filter((profile) => (profile.employment_status ?? 'active') === status)
+}
+
+export function useProfile(
+  userId?: string,
+  { enabled = true }: { enabled?: boolean } = {}
+) {
   return useQuery({
     queryKey: ['profile', userId],
+    enabled,
     queryFn: async () => {
       console.log('useProfile: Fetching profile for userId:', userId)
       const { data: { user } } = await supabase.auth.getUser()
@@ -109,14 +120,17 @@ export function useUpdateProfile() {
   })
 }
 
-export function useProfiles({ enabled = true }: { enabled?: boolean } = {}) {
+export function useProfiles({
+  enabled = true,
+  status = 'active',
+}: { enabled?: boolean; status?: EmploymentStatusFilter } = {}) {
   return useQuery({
-    queryKey: ['profiles'],
+    queryKey: ['profiles', status],
     enabled,
     queryFn: async () => {
       console.log('useProfiles: Fetching all profiles...')
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('profiles')
         .select(`
           *,
@@ -125,20 +139,30 @@ export function useProfiles({ enabled = true }: { enabled?: boolean } = {}) {
         `)
         .order('full_name')
 
+      if (status !== 'all') {
+        query = query.eq('employment_status', status)
+      }
+
+      const { data, error } = await query
+
       if (error) {
         console.error('useProfiles: Error:', error)
         throw error
       }
       
-      console.log('useProfiles: Fetched profiles:', data)
-      return data as unknown as Profile[]
+      const profiles = (data as unknown as Profile[]) || []
+      console.log('useProfiles: Fetched profiles:', profiles)
+      return profiles
     },
   })
 }
 
-export function useProfileBranch(userId?: string) {
+export function useProfileBranch(
+  userId?: string,
+  { status = 'active' }: { status?: EmploymentStatusFilter } = {}
+) {
   return useQuery({
-    queryKey: ['profile-branch', userId],
+    queryKey: ['profile-branch', userId, status],
     queryFn: async () => {
       console.log('useProfileBranch: Fetching branch for userId:', userId)
       
@@ -154,15 +178,17 @@ export function useProfileBranch(userId?: string) {
 
       const { data, error } = await supabase.rpc('get_profile_branch', {
         user_id: id,
-      } as any)
+      })
 
       if (error) {
         console.error('useProfileBranch: Error:', error)
         throw error
       }
       
-      console.log('useProfileBranch: Fetched branch profiles:', data)
-      return data as any as Profile[]
+      const branchProfiles = (data as any as Profile[]) || []
+      const filteredBranch = filterProfilesByStatus(branchProfiles, status)
+      console.log('useProfileBranch: Fetched branch profiles:', filteredBranch)
+      return filteredBranch
     },
   })
 }

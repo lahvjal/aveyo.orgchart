@@ -1,6 +1,6 @@
 /**
  * admin-user-ops – Server-side admin operations using the service role key.
- * Handles: createUser, generateLink, deleteUser, listUsers, updateProfile
+ * Handles: createUser, generateLink, deleteUser, terminateEmployee, listUsers, updateProfile
  *
  * The service role key MUST NOT be in the client bundle.
  * All auth.admin operations are proxied through this edge function.
@@ -127,6 +127,54 @@ serve(async (req) => {
       }
 
       return jsonResponse({ success: true })
+    }
+
+    // ── terminateEmployee ───────────────────────────────────────────────────────
+    if (action === 'terminateEmployee') {
+      if (!isAdmin) {
+        return jsonResponse({ error: 'Admin access required' }, 403)
+      }
+
+      const {
+        targetUserId,
+        successorManagerId = null,
+        terminationReason = null,
+        terminationEffectiveAt = null,
+      } = body
+
+      if (!targetUserId) {
+        return jsonResponse({ error: 'targetUserId is required' }, 400)
+      }
+
+      if (targetUserId === userId) {
+        return jsonResponse({ error: 'You cannot terminate your own account' }, 400)
+      }
+
+      const { data, error } = await supabaseAdmin.rpc('terminate_employee', {
+        p_actor_user_id: userId,
+        p_target_user_id: targetUserId,
+        p_successor_manager_id: successorManagerId,
+        p_termination_reason: terminationReason,
+        p_termination_effective_at: terminationEffectiveAt,
+      })
+
+      if (error) {
+        console.error('admin-user-ops terminateEmployee error:', error)
+        return jsonResponse({ error: error.message }, 400)
+      }
+
+      const result = Array.isArray(data) ? data[0] : null
+      if (!result?.success) {
+        return jsonResponse({ error: 'Failed to terminate employee' }, 400)
+      }
+
+      return jsonResponse({
+        success: true,
+        targetUserId: result.target_user_id,
+        successorManagerId: result.successor_manager_id,
+        reassignedCount: result.reassigned_count ?? 0,
+        terminatedAt: result.terminated_at,
+      })
     }
 
     // ── listUsers ─────────────────────────────────────────────────────────────

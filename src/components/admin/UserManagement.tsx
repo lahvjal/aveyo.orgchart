@@ -13,7 +13,7 @@ import { RemoveEmployeeDialog } from './RemoveEmployeeDialog'
 import { AdminUserEditorDialog } from './AdminUserEditorDialog'
 
 export function UserManagement() {
-  const { data: profiles, isLoading } = useProfiles()
+  const { data: profiles, isLoading } = useProfiles({ status: 'all' })
   const { data: authStatusMap } = useUserAuthStatus()
   const resendInvite = useResendInvite()
 
@@ -21,6 +21,12 @@ export function UserManagement() {
   const [showInviteDialog, setShowInviteDialog] = useState(false)
   const [employeeToRemove, setEmployeeToRemove] = useState<Profile | null>(null)
   const [resendingUserId, setResendingUserId] = useState<string | null>(null)
+  const [statusView, setStatusView] = useState<'active' | 'terminated'>('active')
+
+  const allProfiles = profiles || []
+  const activeProfiles = allProfiles.filter((profile) => (profile.employment_status ?? 'active') === 'active')
+  const terminatedProfiles = allProfiles.filter((profile) => profile.employment_status === 'terminated')
+  const visibleProfiles = statusView === 'active' ? activeProfiles : terminatedProfiles
 
   const handleResendInvite = async (profile: Profile) => {
     setResendingUserId(profile.id)
@@ -44,7 +50,7 @@ export function UserManagement() {
             <div>
               <CardTitle>User Management</CardTitle>
               <CardDescription>
-                Manage user roles, managers, and departments
+                Manage active employees and archived terminations
               </CardDescription>
             </div>
             <Button onClick={() => setShowInviteDialog(true)}>
@@ -54,10 +60,38 @@ export function UserManagement() {
           </div>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center gap-2 mb-4">
+            <Button
+              type="button"
+              size="sm"
+              variant={statusView === 'active' ? 'default' : 'outline'}
+              onClick={() => setStatusView('active')}
+            >
+              Active ({activeProfiles.length})
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={statusView === 'terminated' ? 'default' : 'outline'}
+              onClick={() => setStatusView('terminated')}
+            >
+              Archived ({terminatedProfiles.length})
+            </Button>
+          </div>
+
           <div className="space-y-2">
-            {profiles?.map((profile) => {
+            {visibleProfiles.length === 0 && (
+              <div className="text-sm text-muted-foreground p-4 border rounded-lg">
+                {statusView === 'active'
+                  ? 'No active employees found.'
+                  : 'No archived employees found.'}
+              </div>
+            )}
+
+            {visibleProfiles.map((profile) => {
                 const hasLoggedIn = authStatusMap ? hasUserLoggedIn(profile.id, authStatusMap) : true
                 const isResending = resendingUserId === profile.id
+                const isTerminated = (profile.employment_status ?? 'active') === 'terminated'
 
                 return (
                   <div
@@ -93,6 +127,11 @@ export function UserManagement() {
                               Pending
                             </Badge>
                           )}
+                          {isTerminated && (
+                            <Badge variant="outline" className="border-destructive text-destructive">
+                              Archived
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-sm text-muted-foreground truncate">{profile.job_title}</p>
                         {profile.department && (
@@ -107,7 +146,7 @@ export function UserManagement() {
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {!hasLoggedIn && (
+                      {!isTerminated && !hasLoggedIn && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -125,23 +164,27 @@ export function UserManagement() {
                           )}
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setEditingUser(profile)}
-                        title="Edit employee"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setEmployeeToRemove(profile)}
-                        title="Remove employee"
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {!isTerminated && (
+                        <>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEditingUser(profile)}
+                            title="Edit employee"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setEmployeeToRemove(profile)}
+                            title="Terminate employee"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )
@@ -165,6 +208,7 @@ export function UserManagement() {
         open={!!employeeToRemove}
         onOpenChange={(open) => !open && setEmployeeToRemove(null)}
         employee={employeeToRemove}
+        allProfiles={profiles || []}
       />
     </div>
   )

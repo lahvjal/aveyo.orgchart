@@ -201,7 +201,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   const { data: dbEdges = [], isLoading: edgesLoading } = useProcessEdges(processId)
   // Disabled on public pages — prevents org-wide employee/dept data from being
   // fetched and exposed to unauthenticated viewers
-  const { data: allProfiles = [] } = useProfiles({ enabled: !isPublic })
+  const { data: allProfiles = [] } = useProfiles({ enabled: !isPublic, status: 'all' })
   const { data: allDepartments = [] } = useDepartments({ enabled: !isPublic })
   const isLoading = nodesLoading || edgesLoading
 

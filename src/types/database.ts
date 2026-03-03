@@ -32,6 +32,12 @@ export interface Database {
           is_super_admin: boolean
           is_process_editor: boolean
           onboarding_completed: boolean
+          employment_status: 'active' | 'terminated'
+          terminated_at: string | null
+          termination_effective_at: string | null
+          termination_reason: string | null
+          terminated_by: string | null
+          archived_at: string | null
           created_at: string
           updated_at: string
         }
@@ -57,6 +63,12 @@ export interface Database {
           is_super_admin?: boolean
           is_process_editor?: boolean
           onboarding_completed?: boolean
+          employment_status?: 'active' | 'terminated'
+          terminated_at?: string | null
+          termination_effective_at?: string | null
+          termination_reason?: string | null
+          terminated_by?: string | null
+          archived_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -82,6 +94,12 @@ export interface Database {
           is_super_admin?: boolean
           is_process_editor?: boolean
           onboarding_completed?: boolean
+          employment_status?: 'active' | 'terminated'
+          terminated_at?: string | null
+          termination_effective_at?: string | null
+          termination_reason?: string | null
+          terminated_by?: string | null
+          archived_at?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -525,7 +543,7 @@ export interface Database {
     }
     Functions: {
       get_profile_branch: {
-        Args: { profile_id: string }
+        Args: { user_id: string }
         Returns: {
           id: string
           email: string
@@ -533,7 +551,6 @@ export interface Database {
           preferred_name: string | null
           job_title: string
           job_description: string | null
-          bio: string | null
           start_date: string
           profile_photo_url: string | null
           phone: string | null
@@ -543,7 +560,16 @@ export interface Database {
           social_links: Json | null
           is_admin: boolean
           is_manager: boolean
+          is_executive: boolean
+          is_super_admin: boolean
+          is_process_editor: boolean
           onboarding_completed: boolean
+          employment_status: 'active' | 'terminated'
+          terminated_at: string | null
+          termination_effective_at: string | null
+          termination_reason: string | null
+          terminated_by: string | null
+          archived_at: string | null
           created_at: string
           updated_at: string
         }[]
