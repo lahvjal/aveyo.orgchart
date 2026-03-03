@@ -26,25 +26,39 @@ jobs:
         run: npm run test
 
   sql-authz-tests:
-    if: ${{ secrets.DATABASE_URL != '' }}
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
     steps:
+      - name: Check DATABASE_URL availability
+        id: sql-authz-gate
+        run: |
+          if [ -z "${DATABASE_URL}" ]; then
+            echo "run_sql_authz=false" >> "$GITHUB_OUTPUT"
+            echo "DATABASE_URL is not set; SQL authz checks will be skipped."
+          else
+            echo "run_sql_authz=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
+        if: ${{ steps.sql-authz-gate.outputs.run_sql_authz == 'true' }}
         uses: actions/checkout@v4
 
       - name: Install psql client
+        if: ${{ steps.sql-authz-gate.outputs.run_sql_authz == 'true' }}
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Setup Node
+        if: ${{ steps.sql-authz-gate.outputs.run_sql_authz == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
       - name: Install dependencies
+        if: ${{ steps.sql-authz-gate.outputs.run_sql_authz == 'true' }}
         run: npm ci
 
       - name: Run SQL authz checks
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        if: ${{ steps.sql-authz-gate.outputs.run_sql_authz == 'true' }}
         run: npm run test:sql-authz
