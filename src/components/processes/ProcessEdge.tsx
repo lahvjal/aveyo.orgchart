@@ -82,10 +82,53 @@ function getEdgeSideForNode(
 function getBestHandles(source: any, target: any): { srcPos: Position; tgtPos: Position } {
   const dx = (target.positionAbsolute.x + target.width / 2) - (source.positionAbsolute.x + source.width / 2)
   const dy = (target.positionAbsolute.y + target.height / 2) - (source.positionAbsolute.y + source.height / 2)
-  if (Math.abs(dx) >= Math.abs(dy)) {
+  if (Math.abs(dx) >= Math.max(Math.abs(dy) * 0.55, 24)) {
     return dx >= 0 ? { srcPos: Position.Right, tgtPos: Position.Left } : { srcPos: Position.Left, tgtPos: Position.Right }
   }
   return dy >= 0 ? { srcPos: Position.Bottom, tgtPos: Position.Top } : { srcPos: Position.Top, tgtPos: Position.Bottom }
+}
+
+function getNodeCenter(node: any): Pt {
+  return {
+    x: node.positionAbsolute.x + node.width / 2,
+    y: node.positionAbsolute.y + node.height / 2,
+  }
+}
+
+function getOtherNodeCenterForEdge(
+  e: { id: string; source: string; target: string },
+  nodeId: string,
+  nodeInternals: Map<string, any>,
+): Pt | null {
+  const otherId = e.source === nodeId ? e.target : e.target === nodeId ? e.source : null
+  if (!otherId) return null
+  const other = nodeInternals.get(otherId)
+  if (!other) return null
+  return getNodeCenter(other)
+}
+
+function sideOrderValue(side: Position, pt: Pt): number {
+  // For top/bottom sides, distribute left→right by target X.
+  // For left/right sides, distribute top→bottom by target Y.
+  return side === Position.Left || side === Position.Right ? pt.y : pt.x
+}
+
+function compareEdgesByNodeSide(
+  a: { id: string; source: string; target: string },
+  b: { id: string; source: string; target: string },
+  nodeId: string,
+  side: Position,
+  nodeInternals: Map<string, any>,
+): number {
+  const aPt = getOtherNodeCenterForEdge(a, nodeId, nodeInternals)
+  const bPt = getOtherNodeCenterForEdge(b, nodeId, nodeInternals)
+  if (!aPt && !bPt) return a.id.localeCompare(b.id)
+  if (!aPt) return 1
+  if (!bPt) return -1
+
+  const delta = sideOrderValue(side, aPt) - sideOrderValue(side, bPt)
+  if (Math.abs(delta) > 0.5) return delta
+  return a.id.localeCompare(b.id)
 }
 
 /** Perpendicular distance from point p to segment a→b, clamped to segment bounds. */
@@ -328,13 +371,15 @@ export function ProcessEdge({ id, source, target, selected, data }: EdgeProps<Pr
   const srcPos = posFromString(data?.srcSide) ?? autoSrcPos
   const tgtPos = posFromString(data?.tgtSide) ?? autoTgtPos
 
-  // Rank this edge among peers sharing the same node-side, for even spacing
+  // Rank this edge among peers sharing the same node-side.
+  // Ordering is geometry-aware (not ID-based): each side fans toward peers'
+  // opposite-node positions so side-local lanes naturally avoid crossover.
   const edgesOnSrcSide = allEdges
     .filter((e) => getEdgeSideForNode(e, source, nodeInternals) === srcPos)
-    .sort((a, b) => a.id.localeCompare(b.id))
+    .sort((a, b) => compareEdgesByNodeSide(a, b, source, srcPos, nodeInternals))
   const edgesOnTgtSide = allEdges
     .filter((e) => getEdgeSideForNode(e, target, nodeInternals) === tgtPos)
-    .sort((a, b) => a.id.localeCompare(b.id))
+    .sort((a, b) => compareEdgesByNodeSide(a, b, target, tgtPos, nodeInternals))
 
   const srcIdx   = edgesOnSrcSide.findIndex((e) => e.id === id)
   const srcCount = edgesOnSrcSide.length

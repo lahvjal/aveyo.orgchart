@@ -148,6 +148,48 @@ function sideFromPoint(
   return dy >= 0 ? 'bottom' : 'top'
 }
 
+function getNodeCenter(
+  node: { position: { x: number; y: number }; positionAbsolute?: { x: number; y: number }; width?: number | null; height?: number | null },
+): { x: number; y: number } {
+  const pos = node.positionAbsolute ?? node.position
+  return {
+    x: pos.x + (node.width ?? 200) / 2,
+    y: pos.y + (node.height ?? 100) / 2,
+  }
+}
+
+function getDirectionalSides(
+  sourceNode: { position: { x: number; y: number }; positionAbsolute?: { x: number; y: number }; width?: number | null; height?: number | null },
+  targetNode: { position: { x: number; y: number }; positionAbsolute?: { x: number; y: number }; width?: number | null; height?: number | null },
+): { srcSide: string; tgtSide: string; dx: number; dy: number } {
+  const src = getNodeCenter(sourceNode)
+  const tgt = getNodeCenter(targetNode)
+  const dx = tgt.x - src.x
+  const dy = tgt.y - src.y
+
+  // Bias toward left/right so branches to lower-left/lower-right avoid piling
+  // through the same bottom connector and visually crossing near the node.
+  const horizontalWins = Math.abs(dx) >= Math.max(Math.abs(dy) * 0.55, 24)
+  if (horizontalWins) {
+    return dx >= 0
+      ? { srcSide: 'right', tgtSide: 'left', dx, dy }
+      : { srcSide: 'left', tgtSide: 'right', dx, dy }
+  }
+
+  return dy >= 0
+    ? { srcSide: 'bottom', tgtSide: 'top', dx, dy }
+    : { srcSide: 'top', tgtSide: 'bottom', dx, dy }
+}
+
+function chooseSmartSide(
+  explicit: string | null,
+  directional: string,
+): string {
+  // Keep user-selected/source-handle side stable; directional side is only for
+  // cases where no explicit side exists (e.g. full-node body target).
+  return explicit ?? directional
+}
+
 interface ProcessCanvasProps {
   processId: string
   canEdit: boolean
@@ -576,10 +618,15 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       const flowPt = screenToFlowPosition(lastPointerRef.current)
       const srcNode = getNode(connection.source)
       const tgtNode = getNode(connection.target)
-      const srcSide = sideFromHandleId(connection.sourceHandle)
-        ?? (srcNode ? sideFromPoint(srcNode, flowPt) : null)
-      const tgtSide = sideFromHandleId(connection.targetHandle)
-        ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null)
+      const directional = srcNode && tgtNode ? getDirectionalSides(srcNode, tgtNode) : null
+      const explicitSrcSide = sideFromHandleId(connection.sourceHandle)
+      const explicitTgtSide = sideFromHandleId(connection.targetHandle)
+      const srcSide = directional
+        ? chooseSmartSide(explicitSrcSide, directional.srcSide)
+        : (explicitSrcSide ?? (srcNode ? sideFromPoint(srcNode, flowPt) : null))
+      const tgtSide = directional
+        ? chooseSmartSide(explicitTgtSide, directional.tgtSide)
+        : (explicitTgtSide ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null))
 
       const nextEdges = addEdge(
         {
@@ -604,10 +651,15 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       const flowPt  = screenToFlowPosition(lastPointerRef.current)
       const srcNode = getNode(newConnection.source)
       const tgtNode = getNode(newConnection.target)
-      const srcSide = sideFromHandleId(newConnection.sourceHandle)
-        ?? (srcNode ? sideFromPoint(srcNode, flowPt) : null)
-      const tgtSide = sideFromHandleId(newConnection.targetHandle)
-        ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null)
+      const directional = srcNode && tgtNode ? getDirectionalSides(srcNode, tgtNode) : null
+      const explicitSrcSide = sideFromHandleId(newConnection.sourceHandle)
+      const explicitTgtSide = sideFromHandleId(newConnection.targetHandle)
+      const srcSide = directional
+        ? chooseSmartSide(explicitSrcSide, directional.srcSide)
+        : (explicitSrcSide ?? (srcNode ? sideFromPoint(srcNode, flowPt) : null))
+      const tgtSide = directional
+        ? chooseSmartSide(explicitTgtSide, directional.tgtSide)
+        : (explicitTgtSide ?? (tgtNode ? sideFromPoint(tgtNode, flowPt) : null))
 
       // Update React Flow edge state (source/target may have changed)
       const nextEdges = edgesRef.current.map((e) =>
