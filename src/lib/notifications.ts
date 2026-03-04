@@ -110,7 +110,9 @@ export async function sendEmployeeInvitationEmail(
  * Request a password reset email. Sends a magic link via Resend (Edge Function).
  * No auth required - call from ForgotPassword page.
  */
-export async function sendPasswordResetEmail(email: string): Promise<{ success: boolean; error?: string }> {
+export async function sendPasswordResetEmail(
+  email: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const resolvedAppUrl = appUrl || (typeof window !== 'undefined' ? window.location.origin : '')
     const redirectTo = resolvedAppUrl ? `${resolvedAppUrl}/reset-password` : undefined

@@ -170,9 +170,9 @@ WHERE email = 'your-admin-email@example.com';
 ### 5. Set Up Email Notifications (Optional)
 
 Follow `EMAIL_NOTIFICATIONS.md` to:
-- Deploy the Edge Function
-- Configure email service
-- Set up database webhooks
+- Deploy the current email edge functions
+- Configure server-side email secrets
+- Validate delivery through edge logs and Resend
 
 ## Performance Optimization
 

@@ -32,6 +32,23 @@ export interface Profile {
   manager?: Profile
 }
 
+export interface OrgChartProfile {
+  id: string
+  email: string
+  full_name: string
+  job_title: string
+  profile_photo_url: string | null
+  department_id: string | null
+  manager_id: string | null
+  department?: {
+    id: string
+    name: string
+    color: string
+    description: string | null
+    created_at: string
+  } | null
+}
+
 export interface SocialLinks {
   linkedin?: string
   instagram?: string

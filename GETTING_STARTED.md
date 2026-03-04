@@ -195,14 +195,14 @@ Make sure you:
 1. **Customize departments** - Add your organization's departments
 2. **Add employees** - Have team members sign up
 3. **Organize chart** - Arrange nodes for best visualization
-4. **Set up notifications** - Follow EMAIL_NOTIFICATIONS.md (optional)
+4. **Set up notifications** - Follow EMAIL_NOTIFICATIONS.md for the current edge-function flow (optional)
 5. **Deploy** - Follow DEPLOYMENT.md when ready for production
 
 ## Getting Help
 
 - Check the README.md for technical details
 - Review SUPABASE_SETUP.md for database issues
-- Read EMAIL_NOTIFICATIONS.md for notification setup
+- Read EMAIL_NOTIFICATIONS.md for current notification setup
 - See DEPLOYMENT.md for deployment help
 
 ## Feature Requests

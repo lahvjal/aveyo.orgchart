@@ -17,6 +17,46 @@ END;
 $$;
 
 DO $$
+DECLARE
+  v_function_def TEXT;
+BEGIN
+  SELECT pg_get_functiondef(p.oid)
+  INTO v_function_def
+  FROM pg_proc p
+  JOIN pg_namespace n ON n.oid = p.pronamespace
+  WHERE n.nspname = 'public'
+    AND p.proname = 'get_public_org_share_bundle'
+  LIMIT 1;
+
+  IF v_function_def IS NULL THEN
+    RAISE EXCEPTION 'get_public_org_share_bundle(text) function definition not found';
+  END IF;
+
+  IF position('is_admin' IN lower(v_function_def)) > 0
+     OR position('is_manager' IN lower(v_function_def)) > 0
+     OR position('is_executive' IN lower(v_function_def)) > 0
+     OR position('is_super_admin' IN lower(v_function_def)) > 0
+     OR position('is_process_editor' IN lower(v_function_def)) > 0
+     OR position('onboarding_completed' IN lower(v_function_def)) > 0
+     OR position('employment_status' IN lower(v_function_def)) > 0
+     OR position('terminated_at' IN lower(v_function_def)) > 0
+     OR position('termination_effective_at' IN lower(v_function_def)) > 0
+     OR position('termination_reason' IN lower(v_function_def)) > 0
+     OR position('terminated_by' IN lower(v_function_def)) > 0
+     OR position('archived_at' IN lower(v_function_def)) > 0 THEN
+    RAISE EXCEPTION 'get_public_org_share_bundle must not expose internal role/lifecycle fields';
+  END IF;
+
+  IF position('full_name' IN lower(v_function_def)) = 0
+     OR position('job_title' IN lower(v_function_def)) = 0
+     OR position('manager_id' IN lower(v_function_def)) = 0
+     OR position('department_id' IN lower(v_function_def)) = 0 THEN
+    RAISE EXCEPTION 'get_public_org_share_bundle must include core public org chart fields';
+  END IF;
+END;
+$$;
+
+DO $$
 BEGIN
   IF EXISTS (
     SELECT 1

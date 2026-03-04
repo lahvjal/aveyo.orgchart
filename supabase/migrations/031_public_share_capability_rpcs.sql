@@ -16,6 +16,7 @@ DROP POLICY IF EXISTS "anon_read_shared_process_nodes" ON public.process_nodes;
 DROP POLICY IF EXISTS "anon_read_shared_process_edges" ON public.process_edges;
 
 DROP POLICY IF EXISTS "Anyone can view non-expired share links" ON public.share_links;
+DROP POLICY IF EXISTS "Authenticated users can view non-expired share links" ON public.share_links;
 CREATE POLICY "Authenticated users can view non-expired share links"
   ON public.share_links FOR SELECT
   TO authenticated

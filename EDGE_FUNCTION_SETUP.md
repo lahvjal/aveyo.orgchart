@@ -35,7 +35,8 @@ supabase functions deploy send-password-reset-email
   - `admin-user-ops`
   - `send-invitation-email`
   - `send-notification-email`
-- `send-password-reset-email` is intentionally public and must include abuse controls.
+- `send-password-reset-email` is intentionally public and must include abuse controls
+  (rate limiting, generic response, and redirect allowlist).
 
 Do not deploy privileged functions with `--no-verify-jwt`.
 

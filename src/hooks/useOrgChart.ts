@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { Node, Edge } from 'reactflow'
 import dagre from 'dagre'
-import type { Profile, OrgChartPosition } from '../types'
+import type { OrgChartProfile, OrgChartPosition } from '../types'
 
 // Snap grid constants - must match canvas SLOT_WIDTH
 const SLOT_WIDTH = 320 // 220px node width + 100px gap
@@ -12,7 +12,7 @@ function snapToGrid(value: number): number {
 }
 
 export function useOrgChart(
-  profiles: Profile[], 
+  profiles: OrgChartProfile[],
   isAdmin: boolean, 
   currentUserId?: string,
   savedPositions?: OrgChartPosition[]

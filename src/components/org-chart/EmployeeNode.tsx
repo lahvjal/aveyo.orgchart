@@ -1,13 +1,13 @@
 import { memo } from 'react'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
-import type { Profile } from '../../types'
+import type { OrgChartProfile } from '../../types'
 import { Badge } from '../ui/badge'
 import { getInitials } from '../../lib/utils'
 import { Mail } from 'lucide-react'
 
 interface EmployeeNodeData {
-  profile: Profile
+  profile: OrgChartProfile
 }
 
 export const EmployeeNode = memo(({ data }: NodeProps<EmployeeNodeData>) => {

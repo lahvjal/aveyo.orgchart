@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from './supabase'
-import type { Department, OrgChartPosition, Profile, ShareLink } from '../types'
+import type { Department, OrgChartPosition, OrgChartProfile, Profile, ShareLink } from '../types'
 import type { Database } from '../types/database'
 import type { Process, ProcessEdge, ProcessNode } from '../types/processes'
 
@@ -280,7 +280,13 @@ export interface PublicOrgShareBundle {
     include_contact_info: boolean
     expires_at: string | null
   }
-  profiles: Profile[]
+  profiles: PublicOrgShareProfile[]
+}
+
+export interface PublicOrgShareProfile extends OrgChartProfile {
+  phone: string | null
+  location: string | null
+  social_links: Profile['social_links']
 }
 
 export function usePublicOrgShareBundle(slug: string) {

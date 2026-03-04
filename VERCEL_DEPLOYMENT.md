@@ -51,7 +51,7 @@ Leave these as default - they're already correct!
 
 ### 3. Add Environment Variables
 
-Click "Environment Variables" and add all 6 variables listed above.
+Click "Environment Variables" and add all required variables listed above.
 
 **For now, set `VITE_APP_URL` to a placeholder:**
 ```

@@ -13,14 +13,14 @@ import ReactFlow, {
 import type { NodeTypes, Connection } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { EmployeeNode } from './EmployeeNode'
-import type { Profile, Department, OrgChartPosition } from '../../types'
+import type { OrgChartProfile, Department, OrgChartPosition } from '../../types'
 import { useOrgChart } from '../../hooks/useOrgChart'
 import { useUpdatePosition, getDepartmentDescendantIds, useClearAllPositions, useBatchSavePositions } from '../../lib/queries'
 import { Button } from '../ui/button'
 import { Save, Loader2 } from 'lucide-react'
 
 interface OrgChartCanvasProps {
-  profiles: Profile[]
+  profiles: OrgChartProfile[]
   isAdmin: boolean
   currentUserId?: string
   currentUserDepartmentId?: string
@@ -115,7 +115,7 @@ function OrgChartCanvasInner({
 
     setNodes((nds) =>
       nds.map((n) => {
-        const profile = n.data?.profile as Profile
+        const profile = n.data?.profile as OrgChartProfile
 
         const matchesDept = deptMatchIds
           ? !!(profile.department_id && deptMatchIds.has(profile.department_id))
@@ -145,7 +145,7 @@ function OrgChartCanvasInner({
 
     const targetNodes = deptMatchIds
       ? nodesRef.current.filter((n) => {
-          const profile = n.data?.profile as Profile
+          const profile = n.data?.profile as OrgChartProfile
           return profile?.department_id && deptMatchIds.has(profile.department_id)
         })
       : nodesRef.current
@@ -341,7 +341,7 @@ function OrgChartCanvasInner({
         {!isMobile && (
           <MiniMap 
             nodeColor={(node: any) => {
-              const profile = node.data?.profile as Profile
+              const profile = node.data?.profile as OrgChartProfile
               return profile?.department?.color || '#94a3b8'
             }}
             maskColor="rgba(0, 0, 0, 0.1)"
