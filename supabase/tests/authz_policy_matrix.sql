@@ -58,6 +58,40 @@ $$;
 
 DO $$
 BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'profiles'
+      AND column_name = 'has_logged_in'
+  ) THEN
+    RAISE EXCEPTION 'profiles.has_logged_in column is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'profiles'
+      AND column_name = 'last_sign_in_at'
+  ) THEN
+    RAISE EXCEPTION 'profiles.last_sign_in_at column is missing';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger t
+    WHERE t.tgname = 'sync_profile_login_status_on_auth_user_update'
+      AND t.tgrelid = 'auth.users'::regclass
+      AND NOT t.tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'sync_profile_login_status_on_auth_user_update trigger is missing on auth.users';
+  END IF;
+END;
+$$;
+
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
     FROM pg_policies

@@ -42,8 +42,9 @@ else
     FROM_EMAIL="${FROM_EMAIL}"
 fi
 
-echo "Deploying send-invitation-email with JWT verification enabled..."
-supabase functions deploy send-invitation-email
+echo "Deploying send-invitation-email with explicit no-verify-jwt..."
+echo "JWT is enforced in-function via bearer token + auth.getUser(token)."
+supabase functions deploy send-invitation-email --no-verify-jwt
 
 echo "Done. Useful checks:"
 echo "  supabase functions list"

@@ -32,6 +32,8 @@ export interface Database {
           is_super_admin: boolean
           is_process_editor: boolean
           onboarding_completed: boolean
+          has_logged_in: boolean
+          last_sign_in_at: string | null
           employment_status: 'active' | 'terminated'
           terminated_at: string | null
           termination_effective_at: string | null
@@ -63,6 +65,8 @@ export interface Database {
           is_super_admin?: boolean
           is_process_editor?: boolean
           onboarding_completed?: boolean
+          has_logged_in?: boolean
+          last_sign_in_at?: string | null
           employment_status?: 'active' | 'terminated'
           terminated_at?: string | null
           termination_effective_at?: string | null
@@ -94,6 +98,8 @@ export interface Database {
           is_super_admin?: boolean
           is_process_editor?: boolean
           onboarding_completed?: boolean
+          has_logged_in?: boolean
+          last_sign_in_at?: string | null
           employment_status?: 'active' | 'terminated'
           terminated_at?: string | null
           termination_effective_at?: string | null

@@ -1,8 +1,5 @@
 import { supabase } from './supabase'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-
 interface AdminInvokeError {
   message: string
   status: number
@@ -38,41 +35,41 @@ function mapAdminErrorMessage(code: string | undefined, fallback: string) {
   return ADMIN_ERROR_MESSAGES[code] || fallback
 }
 
-async function invokeWithToken<T = unknown>(
-  token: string,
-  body: Record<string, unknown>
+async function invokeWithSession<T = unknown>(
+  body: Record<string, unknown>,
+  accessToken?: string
 ): Promise<{ data: T | null; error: AdminInvokeError | null }> {
-  const response = await fetch(`${supabaseUrl}/functions/v1/admin-user-ops`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(body),
-  })
+  const invokeOptions: { body: Record<string, unknown>; headers?: Record<string, string> } = { body }
+  if (accessToken) {
+    invokeOptions.headers = { Authorization: `Bearer ${accessToken}` }
+  }
+
+  const { data, error } = await supabase.functions.invoke('admin-user-ops', invokeOptions)
+  if (!error) {
+    return { data: (data ?? null) as T | null, error: null }
+  }
 
   let payload: unknown = null
-  try {
-    payload = await response.json()
-  } catch {
-    payload = null
+  const responseLike = (error as { context?: Response } | null)?.context
+  if (responseLike) {
+    try {
+      payload = await responseLike.clone().json()
+    } catch {
+      payload = null
+    }
   }
 
   const errorPayload = asAdminErrorPayload(payload)
-
-  if (response.ok) {
-    return { data: payload as T, error: null }
-  }
+  const status = responseLike?.status ?? 0
 
   return {
-    data: payload as T,
+    data: (data ?? null) as T | null,
     error: {
       message: mapAdminErrorMessage(
         errorPayload?.code,
-        errorPayload?.error || errorPayload?.message || `Request failed (${response.status})`
+        errorPayload?.error || errorPayload?.message || error.message || `Request failed (${status || 'network'})`
       ),
-      status: response.status,
+      status,
       code: errorPayload?.code,
       requestId: errorPayload?.requestId,
       body: payload,
@@ -103,25 +100,28 @@ export async function invokeAdminUserOps<T = unknown>(body: Record<string, unkno
   await supabase.auth.getUser()
 
   let { data: { session } } = await supabase.auth.getSession()
+  // For privileged edge calls, proactively refresh once to avoid stale token
+  // edge cases seen on first-page-load after app hydration.
+  const { data: proactivelyRefreshed } = await supabase.auth.refreshSession()
+  if (proactivelyRefreshed.session?.access_token) {
+    session = proactivelyRefreshed.session
+  }
 
   if (!session?.access_token) {
-    const { data } = await supabase.auth.refreshSession()
-    session = data.session
+    const { data: refreshed } = await supabase.auth.refreshSession()
+    session = refreshed.session
   }
 
   if (!session?.access_token) {
     throw new Error('No active auth session. Please sign out and sign in again.')
   }
 
-  let response = await invokeWithToken<T>(session.access_token, body)
+  let response = await invokeWithSession<T>(body, session.access_token)
   if (!response.error) return response
 
-  const invalidJwt =
-    response.error.status === 401 &&
-    (((asAdminErrorPayload(response.error.body)?.message ?? response.error.message) || '')
-      .toLowerCase()
-      .includes('invalid jwt'))
-  if (!invalidJwt) return response
+  // Edge gateway responses can return generic 401 payloads for expired/invalid tokens.
+  // Refresh and retry once on any 401 to recover from stale session state.
+  if (response.error.status !== 401) return response
 
   // Token can be stale in local cookie storage; refresh and retry once.
   const { data: refreshedData } = await supabase.auth.refreshSession()
@@ -130,6 +130,6 @@ export async function invokeAdminUserOps<T = unknown>(body: Record<string, unkno
     return response
   }
 
-  response = await invokeWithToken<T>(refreshedToken, body)
+  response = await invokeWithSession<T>(body, refreshedToken)
   return response
 }

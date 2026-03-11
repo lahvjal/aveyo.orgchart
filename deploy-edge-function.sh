@@ -34,14 +34,14 @@ else
 fi
 
 echo "Deploying functions..."
-# Privileged functions keep JWT verification enabled.
-supabase functions deploy send-invitation-email
-supabase functions deploy send-notification-email
-supabase functions deploy admin-user-ops
+# These functions validate bearer tokens inside runtime (auth.getUser(token)).
+# Explicitly disable gateway JWT verification to avoid ES256 token rejection.
+supabase functions deploy send-invitation-email --no-verify-jwt
+supabase functions deploy send-notification-email --no-verify-jwt
+supabase functions deploy admin-user-ops --no-verify-jwt
 
-# Password reset endpoint is intentionally public; deploy policy should be
-# configured as public in the function config instead of CLI flags in scripts.
-supabase functions deploy send-password-reset-email
+# Password reset endpoint is intentionally public.
+supabase functions deploy send-password-reset-email --no-verify-jwt
 
 echo ""
 echo "Setup complete."

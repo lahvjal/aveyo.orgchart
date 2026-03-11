@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { sendEmployeeInvitationEmail } from '../lib/notifications'
-import { invokeAdminUserOps } from '../lib/adminUserOps'
 import type { Profile } from '../types'
 
 interface ResendInviteResult {
@@ -10,11 +9,13 @@ interface ResendInviteResult {
   error?: string
 }
 
-interface ListUsersResponse {
-  success?: boolean
-  error?: string
-  users?: Array<{ id: string; last_sign_in_at: string | null }>
+interface ProfileAuthStatusRow {
+  id: string
+  has_logged_in: boolean | null
+  last_sign_in_at: string | null
 }
+
+export type UserAuthStatusMap = Record<string, boolean>
 
 /**
  * Hook for resending invitations to employees who haven't logged in yet
@@ -68,8 +69,8 @@ export function useResendInvite() {
 }
 
 /**
- * Hook to get auth status for all users.
- * Returns a map of userId -> last_sign_in_at
+ * Hook to get auth status from profiles mirror columns.
+ * Returns a map of userId -> hasLoggedIn boolean.
  */
 export function useUserAuthStatus() {
   return useQuery({
@@ -82,26 +83,37 @@ export function useUserAuthStatus() {
       }
 
       try {
-        const { data, error } = await invokeAdminUserOps<ListUsersResponse>({
-          action: 'listUsers',
-          userId: currentUser.id,
-        })
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, has_logged_in, last_sign_in_at')
 
-        if (error || !data?.success) {
-          console.error('useUserAuthStatus: Error fetching users:', data?.error || error)
+        if (error) {
+          const errorMessage = (error.message || '').toLowerCase()
+          const mirrorColumnsMissing =
+            error.code === '42703' ||
+            errorMessage.includes('has_logged_in') ||
+            errorMessage.includes('last_sign_in_at')
+
+          if (mirrorColumnsMissing) {
+            console.warn('useUserAuthStatus: login-status mirror columns not available yet')
+            return {}
+          }
+
+          console.error('useUserAuthStatus: Error fetching profile auth status:', error)
           return {}
         }
 
-        if (!data.users) {
+        if (!data) {
           return {}
         }
 
-        const authStatusMap: Record<string, string | null> = {}
-        for (const user of data.users) {
-          authStatusMap[user.id] = user.last_sign_in_at ?? null
+        const authStatusMap: UserAuthStatusMap = {}
+        const rows = data as ProfileAuthStatusRow[]
+        for (const row of rows) {
+          authStatusMap[row.id] = Boolean(row.has_logged_in || row.last_sign_in_at)
         }
 
-        console.log('useUserAuthStatus: Fetched auth status for', data.users.length, 'users')
+        console.log('useUserAuthStatus: Fetched auth status for', rows.length, 'users')
         return authStatusMap
       } catch (error) {
         console.error('useUserAuthStatus: Unexpected error:', error)
@@ -114,13 +126,12 @@ export function useUserAuthStatus() {
 
 /**
  * Helper to check if a user has ever logged in.
- * Returns true when the user has a recorded sign-in date.
- * Returns false only when the user is explicitly in the map with a null date.
+ * Returns false only when the user is explicitly in the map as not logged in.
  * Returns true (benefit of the doubt) when the userId is absent from the map,
- * which can happen if the auth-status fetch failed or returned partial data —
+ * which can happen if the auth-status query failed or returned partial data —
  * better to hide a pending badge than to falsely show one.
  */
-export function hasUserLoggedIn(userId: string, authStatusMap: Record<string, string | null>): boolean {
+export function hasUserLoggedIn(userId: string, authStatusMap: UserAuthStatusMap): boolean {
   if (!(userId in authStatusMap)) return true
-  return !!authStatusMap[userId]
+  return authStatusMap[userId]
 }
