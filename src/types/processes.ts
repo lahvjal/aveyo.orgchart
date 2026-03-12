@@ -25,6 +25,7 @@ export interface ProcessNode {
   node_type: ProcessNodeType
   label: string
   description: string | null
+  document_links: string[]
   x_position: number
   y_position: number
   tagged_profile_ids: string[]

@@ -1,4 +1,4 @@
-import { memo, useState, useRef, useCallback, useEffect } from 'react'
+import { memo, useState, useRef, useCallback, useEffect, useMemo, Fragment } from 'react'
 import { Handle, Position, useStore } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import {
@@ -7,6 +7,8 @@ import {
   CheckSquare,
   GitFork,
   FileText,
+  ExternalLink,
+  Link2,
   UserCheck,
   Bell,
   Trash2,
@@ -25,6 +27,7 @@ export interface ProcessNodeData {
   nodeType: ProcessNodeType
   label: string
   description?: string
+  documentLinks: string[]
   taggedProfileIds: string[]
   taggedDepartmentIds: string[]
 }
@@ -39,8 +42,170 @@ const NODE_ICONS: Record<ProcessNodeType, React.ComponentType<{ className?: stri
   notification: Bell,
 }
 
+type DescriptionBlock =
+  | { type: 'text'; lines: string[] }
+  | { type: 'ul'; items: string[] }
+  | { type: 'ol'; items: string[] }
+
+const BULLET_CHAR = '\u2022'
+const BULLET_PREFIX = `${BULLET_CHAR} `
+const URL_PATTERN = /(https?:\/\/[^\s<>"']+)/gi
+const TRAILING_PUNCTUATION_PATTERN = /[),.;!?]+$/
+
+function toSafeHttpUrl(rawUrl: string): string | null {
+  try {
+    const candidate = new URL(rawUrl)
+    if (candidate.protocol !== 'http:' && candidate.protocol !== 'https:') return null
+    return candidate.toString()
+  } catch {
+    return null
+  }
+}
+
+function renderTextWithLinks(text: string): React.ReactNode[] {
+  const pieces: React.ReactNode[] = []
+  let lastIndex = 0
+  let matchIndex = 0
+
+  for (const match of text.matchAll(URL_PATTERN)) {
+    const rawUrl = match[0]
+    const start = match.index ?? 0
+
+    if (start > lastIndex) {
+      pieces.push(text.slice(lastIndex, start))
+    }
+
+    const trailing = rawUrl.match(TRAILING_PUNCTUATION_PATTERN)?.[0] ?? ''
+    const cleanUrl = trailing ? rawUrl.slice(0, -trailing.length) : rawUrl
+    const safeUrl = toSafeHttpUrl(cleanUrl)
+
+    if (safeUrl) {
+      pieces.push(
+        <a
+          key={`link-${start}-${matchIndex}`}
+          href={safeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-primary underline underline-offset-2 break-all"
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {cleanUrl}
+        </a>
+      )
+      if (trailing) pieces.push(trailing)
+    } else {
+      pieces.push(rawUrl)
+    }
+
+    lastIndex = start + rawUrl.length
+    matchIndex += 1
+  }
+
+  if (lastIndex < text.length) {
+    pieces.push(text.slice(lastIndex))
+  }
+
+  return pieces.length > 0 ? pieces : [text]
+}
+
+function getDocumentLinkLabel(rawUrl: string, index: number): string {
+  try {
+    const parsed = new URL(rawUrl)
+    const host = parsed.hostname.replace(/^www\./, '')
+    if (host.includes('drive.google.com') || host.includes('docs.google.com')) {
+      return `Google Drive document ${index + 1}`
+    }
+    return `${host}${parsed.pathname}`.slice(0, 48)
+  } catch {
+    return `Document ${index + 1}`
+  }
+}
+
+function toDescriptionBlocks(value: string): DescriptionBlock[] {
+  const lines = value.split('\n')
+  const blocks: DescriptionBlock[] = []
+  let textLines: string[] = []
+  let listType: 'ul' | 'ol' | null = null
+  let listItems: string[] = []
+
+  const flushText = () => {
+    if (textLines.length > 0) {
+      blocks.push({ type: 'text', lines: textLines })
+      textLines = []
+    }
+  }
+
+  const flushList = () => {
+    if (listType && listItems.length > 0) {
+      blocks.push({ type: listType, items: listItems })
+      listType = null
+      listItems = []
+    }
+  }
+
+  for (const rawLine of lines) {
+    const line = rawLine.trimEnd()
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      flushText()
+      flushList()
+      continue
+    }
+
+    const bulletMatch = trimmed.match(/^[-*]\s+(.+)$/)
+    const bulletItem = bulletMatch?.[1]
+      ?? (trimmed.startsWith(BULLET_PREFIX) ? trimmed.slice(BULLET_PREFIX.length).trim() : null)
+
+    if (bulletItem) {
+      flushText()
+      if (listType !== 'ul') {
+        flushList()
+        listType = 'ul'
+      }
+      listItems.push(bulletItem)
+      continue
+    }
+
+    const orderedMatch = trimmed.match(/^\d+\.\s+(.+)$/)
+    if (orderedMatch) {
+      flushText()
+      if (listType !== 'ol') {
+        flushList()
+        listType = 'ol'
+      }
+      listItems.push(orderedMatch[1])
+      continue
+    }
+
+    flushList()
+    textLines.push(line)
+  }
+
+  flushText()
+  flushList()
+  return blocks
+}
+
+function autoSizeTextarea(el: HTMLTextAreaElement | null, minHeightPx = 96) {
+  if (!el) return
+  el.style.height = '0px'
+  el.style.height = `${Math.max(el.scrollHeight, minHeightPx)}px`
+}
+
+function getCurrentLineStart(value: string, cursor: number): number {
+  return value.lastIndexOf('\n', Math.max(cursor - 1, 0)) + 1
+}
+
+function getCurrentLineEnd(value: string, cursor: number): number {
+  const nextNewline = value.indexOf('\n', cursor)
+  return nextNewline === -1 ? value.length : nextNewline
+}
+
 export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
-  const { nodeType, label, description, taggedProfileIds, taggedDepartmentIds } = data
+  const { nodeType, label, description, documentLinks, taggedProfileIds, taggedDepartmentIds } = data
 
   // Shared canvas state/callbacks from context — never stale, never cause setNodes loops
   const {
@@ -49,6 +214,7 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
     allDepartments,
     onLabelChange,
     onDescriptionChange,
+    onUpdateDocumentLinks,
     onDelete,
     onUpdateTaggedProfiles,
     onUpdateTaggedDepartments,
@@ -66,11 +232,14 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
   const [editingDesc, setEditingDesc] = useState(false)
   const [localLabel, setLocalLabel] = useState(label)
   const [localDesc, setLocalDesc] = useState(description ?? '')
+  const [localLinkInput, setLocalLinkInput] = useState('')
+  const [linkInputError, setLinkInputError] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [deptPickerOpen, setDeptPickerOpen] = useState(false)
   const labelRef = useRef<HTMLInputElement>(null)
-  const descRef = useRef<HTMLInputElement>(null)
+  const descRef = useRef<HTMLTextAreaElement>(null)
+  const linkInputRef = useRef<HTMLInputElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const deptPickerRef = useRef<HTMLDivElement>(null)
@@ -117,12 +286,156 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
     onDescriptionChange(id, localDesc)
   }, [id, localDesc, onDescriptionChange])
 
+  const descriptionBlocks = useMemo(() => toDescriptionBlocks(localDesc), [localDesc])
+  const normalizedDocumentLinks = useMemo(() => {
+    const seen = new Set<string>()
+    const links: string[] = []
+
+    for (const rawLink of documentLinks ?? []) {
+      const safeLink = toSafeHttpUrl(rawLink)
+      if (!safeLink || seen.has(safeLink)) continue
+      seen.add(safeLink)
+      links.push(safeLink)
+    }
+
+    return links
+  }, [documentLinks])
+
+  useEffect(() => {
+    if (!editingDesc) return
+    autoSizeTextarea(descRef.current)
+  }, [editingDesc, localDesc])
+
+  useEffect(() => {
+    if (!localLinkInput.trim()) {
+      setLinkInputError('')
+    }
+  }, [localLinkInput])
+
   const handleLabelKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === 'Escape') commitLabel()
   }
-  const handleDescKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' || e.key === 'Escape') commitDesc()
+  const handleDescKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape' || ((e.metaKey || e.ctrlKey) && e.key === 'Enter')) {
+      e.preventDefault()
+      commitDesc()
+      return
+    }
+
+    if (e.key === 'Enter' && !e.shiftKey) {
+      const caretStart = e.currentTarget.selectionStart ?? 0
+      const caretEnd = e.currentTarget.selectionEnd ?? caretStart
+      if (caretStart !== caretEnd) return
+
+      const lineStart = getCurrentLineStart(localDesc, caretStart)
+      const lineEnd = getCurrentLineEnd(localDesc, caretStart)
+      const lineValue = localDesc.slice(lineStart, lineEnd)
+
+      const bulletLineMatch = lineValue.match(/^(\s*)(?:•|-|\*)\s(.*)$/)
+      const orderedLineMatch = lineValue.match(/^(\s*)(\d+)\.\s(.*)$/)
+      if (!bulletLineMatch && !orderedLineMatch) return
+
+      e.preventDefault()
+
+      let nextValue = localDesc
+      let nextCaret = caretStart
+
+      if (bulletLineMatch) {
+        const indent = bulletLineMatch[1]
+        const lineContent = bulletLineMatch[2]
+
+        if (!lineContent.trim()) {
+          nextValue = `${localDesc.slice(0, lineStart)}${indent}${localDesc.slice(lineEnd)}`
+          nextCaret = lineStart + indent.length
+        } else {
+          const insertion = `\n${indent}${BULLET_PREFIX}`
+          nextValue = `${localDesc.slice(0, caretStart)}${insertion}${localDesc.slice(caretStart)}`
+          nextCaret = caretStart + insertion.length
+        }
+      } else if (orderedLineMatch) {
+        const indent = orderedLineMatch[1]
+        const currentIndex = Number.parseInt(orderedLineMatch[2], 10)
+        const lineContent = orderedLineMatch[3]
+
+        if (!lineContent.trim()) {
+          nextValue = `${localDesc.slice(0, lineStart)}${indent}${localDesc.slice(lineEnd)}`
+          nextCaret = lineStart + indent.length
+        } else {
+          const nextIndex = Number.isFinite(currentIndex) ? currentIndex + 1 : 1
+          const insertion = `\n${indent}${nextIndex}. `
+          nextValue = `${localDesc.slice(0, caretStart)}${insertion}${localDesc.slice(caretStart)}`
+          nextCaret = caretStart + insertion.length
+        }
+      }
+
+      setLocalDesc(nextValue)
+
+      requestAnimationFrame(() => {
+        if (!descRef.current) return
+        descRef.current.setSelectionRange(nextCaret, nextCaret)
+        autoSizeTextarea(descRef.current)
+      })
+      return
+    }
+
+    if (e.key === ' ') {
+      const caretStart = e.currentTarget.selectionStart ?? 0
+      const caretEnd = e.currentTarget.selectionEnd ?? caretStart
+      if (caretStart !== caretEnd) return
+
+      const lineStart = getCurrentLineStart(localDesc, caretStart)
+      const linePrefix = localDesc.slice(lineStart, caretStart)
+      const bulletPrefixMatch = linePrefix.match(/^(\s*)[-*]$/)
+      if (!bulletPrefixMatch) return
+
+      e.preventDefault()
+      const replacement = `${bulletPrefixMatch[1]}${BULLET_PREFIX}`
+      const nextValue = `${localDesc.slice(0, lineStart)}${replacement}${localDesc.slice(caretStart)}`
+      setLocalDesc(nextValue)
+
+      requestAnimationFrame(() => {
+        if (!descRef.current) return
+        const nextCaret = lineStart + replacement.length
+        descRef.current.setSelectionRange(nextCaret, nextCaret)
+        autoSizeTextarea(descRef.current)
+      })
+    }
   }
+
+  const handleAddDocumentLink = useCallback(() => {
+    const safeUrl = toSafeHttpUrl(localLinkInput.trim())
+    if (!safeUrl) {
+      setLinkInputError('Enter a valid URL (https://...)')
+      return
+    }
+
+    if (normalizedDocumentLinks.includes(safeUrl)) {
+      setLinkInputError('That link is already attached.')
+      return
+    }
+
+    onUpdateDocumentLinks(id, [...normalizedDocumentLinks, safeUrl])
+    setLocalLinkInput('')
+    setLinkInputError('')
+
+    requestAnimationFrame(() => {
+      linkInputRef.current?.focus()
+    })
+  }, [id, localLinkInput, normalizedDocumentLinks, onUpdateDocumentLinks])
+
+  const handleRemoveDocumentLink = useCallback((url: string) => {
+    onUpdateDocumentLinks(
+      id,
+      normalizedDocumentLinks.filter((entry) => entry !== url)
+    )
+    setLinkInputError('')
+  }, [id, normalizedDocumentLinks, onUpdateDocumentLinks])
+
+  const handleLinkInputKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    handleAddDocumentLink()
+  }, [handleAddDocumentLink])
 
   const isActiveProfile = (profile: { employment_status?: string | null }) =>
     (profile.employment_status ?? 'active') === 'active'
@@ -279,25 +592,148 @@ export const ProcessNode = memo(({ id, data }: NodeProps<ProcessNodeData>) => {
 
         {/* Description */}
         {isEditing && editingDesc ? (
-          <input
-            ref={descRef}
-            value={localDesc}
-            onChange={(e) => setLocalDesc(e.target.value)}
-            onBlur={commitDesc}
-            onKeyDown={handleDescKeyDown}
-            onMouseDown={stopPropagation}
-            autoFocus
-            placeholder="Add description..."
-            className="w-full mt-1 text-xs text-gray-500 bg-gray-50 border border-gray-300 rounded px-1.5 py-0.5 outline-none focus:border-primary"
-          />
+          <div className="mt-1">
+            <textarea
+              ref={descRef}
+              value={localDesc}
+              onChange={(e) => setLocalDesc(e.target.value)}
+              onInput={(e) => autoSizeTextarea(e.currentTarget)}
+              onFocus={(e) => autoSizeTextarea(e.currentTarget)}
+              onBlur={commitDesc}
+              onKeyDown={handleDescKeyDown}
+              onMouseDown={stopPropagation}
+              onPointerDown={stopPropagation}
+              autoFocus
+              rows={1}
+              placeholder={'Add details...\n- Bullet points\n1. Numbered steps\nhttps://drive.google.com/...'}
+              className="nodrag nowheel w-full text-xs text-gray-600 leading-relaxed bg-gray-50 border border-gray-300 rounded px-2 py-1.5 outline-none focus:border-primary min-h-[96px] resize-none overflow-hidden"
+            />
+            <p className="mt-1 text-[10px] text-gray-400">
+              Enter for new lines. Ctrl/Cmd+Enter to save.
+            </p>
+          </div>
         ) : (
-          <p
+          <div
             className={`mt-1 text-xs text-muted-foreground leading-tight min-h-[1rem] ${isEditing ? 'cursor-text hover:bg-gray-50 rounded px-1 -mx-1 py-0.5' : ''}`}
             onClick={() => { if (isEditing) { setEditingDesc(true); setTimeout(() => descRef.current?.focus(), 0) } }}
             title={isEditing ? 'Click to add description' : undefined}
           >
-            {localDesc || (isEditing ? <span className="italic text-gray-300">description...</span> : null)}
-          </p>
+            {localDesc ? (
+              <div className="space-y-1.5">
+                {descriptionBlocks.map((block, blockIndex) => {
+                  if (block.type === 'ul') {
+                    return (
+                      <ul key={`desc-ul-${blockIndex}`} className="list-disc pl-4 space-y-0.5">
+                        {block.items.map((item, itemIndex) => (
+                          <li key={`desc-ul-item-${blockIndex}-${itemIndex}`}>
+                            {renderTextWithLinks(item)}
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  }
+
+                  if (block.type === 'ol') {
+                    return (
+                      <ol key={`desc-ol-${blockIndex}`} className="list-decimal pl-4 space-y-0.5">
+                        {block.items.map((item, itemIndex) => (
+                          <li key={`desc-ol-item-${blockIndex}-${itemIndex}`}>
+                            {renderTextWithLinks(item)}
+                          </li>
+                        ))}
+                      </ol>
+                    )
+                  }
+
+                  return (
+                    <p key={`desc-text-${blockIndex}`} className="leading-relaxed">
+                      {block.lines.map((line, lineIndex) => (
+                        <Fragment key={`desc-text-line-${blockIndex}-${lineIndex}`}>
+                          {renderTextWithLinks(line)}
+                          {lineIndex < block.lines.length - 1 && <br />}
+                        </Fragment>
+                      ))}
+                    </p>
+                  )
+                })}
+              </div>
+            ) : (
+              isEditing ? <span className="italic text-gray-300">description...</span> : null
+            )}
+          </div>
+        )}
+
+        {/* Attached document links */}
+        {(normalizedDocumentLinks.length > 0 || isEditing) && (
+          <div className="mt-2 pt-2 border-t border-gray-100">
+            <div className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-gray-400 mb-1">
+              <Link2 className="h-3 w-3" />
+              <span>Documents</span>
+            </div>
+
+            {normalizedDocumentLinks.length > 0 ? (
+              <div className="space-y-1">
+                {normalizedDocumentLinks.map((url, index) => (
+                  <div key={url} className="flex items-center gap-1.5">
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[11px] text-primary underline underline-offset-2 break-all"
+                      onMouseDown={stopPropagation}
+                      onPointerDown={stopPropagation}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <ExternalLink className="h-3 w-3 flex-shrink-0" />
+                      <span>{getDocumentLinkLabel(url, index)}</span>
+                    </a>
+                    {isEditing && (
+                      <button
+                        onClick={() => handleRemoveDocumentLink(url)}
+                        onMouseDown={stopPropagation}
+                        onPointerDown={stopPropagation}
+                        className="text-gray-400 hover:text-red-500 transition-colors"
+                        title="Remove link"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              isEditing && <p className="text-[11px] text-gray-300 italic">No links attached yet.</p>
+            )}
+
+            {isEditing && (
+              <div className="mt-1.5">
+                <div className="flex items-center gap-1.5">
+                  <input
+                    ref={linkInputRef}
+                    value={localLinkInput}
+                    onChange={(e) => setLocalLinkInput(e.target.value)}
+                    onKeyDown={handleLinkInputKeyDown}
+                    onMouseDown={stopPropagation}
+                    onPointerDown={stopPropagation}
+                    placeholder="Paste Google Drive URL..."
+                    className="nodrag w-full text-[11px] bg-gray-50 border border-gray-300 rounded px-2 py-1 outline-none focus:border-primary"
+                  />
+                  <button
+                    onClick={handleAddDocumentLink}
+                    onMouseDown={stopPropagation}
+                    onPointerDown={stopPropagation}
+                    className="text-[11px] px-2 py-1 rounded bg-primary/10 text-primary hover:bg-primary/20 transition-colors whitespace-nowrap"
+                    title="Attach link"
+                  >
+                    Add
+                  </button>
+                </div>
+                {linkInputError && (
+                  <p className="text-[10px] text-red-500 mt-1">{linkInputError}</p>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Department badges

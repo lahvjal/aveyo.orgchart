@@ -7,6 +7,7 @@ export interface ProcessCanvasContextType {
   allDepartments: Department[]
   onLabelChange: (id: string, label: string) => void
   onDescriptionChange: (id: string, description: string) => void
+  onUpdateDocumentLinks: (id: string, links: string[]) => void
   onDelete: (id: string) => void
   onUpdateTaggedProfiles: (nodeId: string, profileIds: string[]) => void
   onUpdateTaggedDepartments: (nodeId: string, departmentIds: string[]) => void

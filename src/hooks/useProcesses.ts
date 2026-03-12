@@ -29,6 +29,7 @@ function mapNodeRow(row: ProcessNodeRow): ProcessNode {
   return {
     ...row,
     node_type: row.node_type as ProcessNodeType,
+    document_links: row.document_links ?? [],
   }
 }
 
@@ -193,6 +194,7 @@ export function useDuplicateProcess() {
                 node_type: n.node_type,
                 label: n.label,
                 description: n.description,
+                document_links: n.document_links ?? [],
                 x_position: n.x_position,
                 y_position: n.y_position,
                 tagged_profile_ids: n.tagged_profile_ids,
@@ -277,6 +279,7 @@ export function useCreateProcessNode() {
       node_type: ProcessNodeType
       label: string
       description?: string
+      document_links?: string[]
       x_position: number
       y_position: number
     }) => {
@@ -285,6 +288,7 @@ export function useCreateProcessNode() {
         node_type: node.node_type,
         label: node.label,
         description: node.description ?? null,
+        document_links: node.document_links ?? [],
         x_position: node.x_position,
         y_position: node.y_position,
       }
@@ -313,6 +317,7 @@ export function useUpdateProcessNode() {
       process_id: string
       label?: string
       description?: string
+      document_links?: string[]
       x_position?: number
       y_position?: number
       tagged_profile_ids?: string[]
@@ -322,6 +327,7 @@ export function useUpdateProcessNode() {
       const patch: ProcessNodeUpdate = {}
       if (updates.label !== undefined) patch.label = updates.label
       if (updates.description !== undefined) patch.description = updates.description
+      if (updates.document_links !== undefined) patch.document_links = updates.document_links
       if (updates.x_position !== undefined) patch.x_position = updates.x_position
       if (updates.y_position !== undefined) patch.y_position = updates.y_position
       if (updates.tagged_profile_ids !== undefined) patch.tagged_profile_ids = updates.tagged_profile_ids

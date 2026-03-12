@@ -364,6 +364,7 @@ export interface Database {
           node_type: string
           label: string
           description: string | null
+          document_links: string[]
           x_position: number
           y_position: number
           tagged_profile_ids: string[]
@@ -376,6 +377,7 @@ export interface Database {
           node_type?: string
           label?: string
           description?: string | null
+          document_links?: string[]
           x_position?: number
           y_position?: number
           tagged_profile_ids?: string[]
@@ -388,6 +390,7 @@ export interface Database {
           node_type?: string
           label?: string
           description?: string | null
+          document_links?: string[]
           x_position?: number
           y_position?: number
           tagged_profile_ids?: string[]

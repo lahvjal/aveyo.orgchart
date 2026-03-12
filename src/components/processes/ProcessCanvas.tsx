@@ -44,6 +44,7 @@ function toFlowNodes(dbNodes: ProcessNodeRecord[]): Node<ProcessNodeData>[] {
       nodeType: n.node_type,
       label: n.label,
       description: n.description ?? '',
+      documentLinks: n.document_links ?? [],
       taggedProfileIds: n.tagged_profile_ids ?? [],
       taggedDepartmentIds: n.tagged_department_ids ?? [],
     },
@@ -79,6 +80,7 @@ function graphSignature(
       t: n.data.nodeType,
       l: n.data.label,
       d: n.data.description ?? '',
+      links: [...(n.data.documentLinks ?? [])].sort(),
       p: [...n.data.taggedProfileIds].sort(),
       dep: [...n.data.taggedDepartmentIds].sort(),
     }))
@@ -346,14 +348,42 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
         node_type: n.data.nodeType,
         label: n.data.label,
         description: n.data.description || null,
+        document_links: n.data.documentLinks ?? [],
         x_position: n.position.x,
         y_position: n.position.y,
         tagged_profile_ids: n.data.taggedProfileIds,
         tagged_department_ids: n.data.taggedDepartmentIds,
       }))
-      const { error } = await supabase
+      let { error } = await supabase
         .from('process_nodes')
         .upsert(nodeRows, { onConflict: 'id' })
+
+      // Backward compatibility: if document_links column is not present yet,
+      // retry upsert without it so core node editing still works.
+      const nodeErrText = `${error?.message ?? ''} ${error?.details ?? ''}`.toLowerCase()
+      const shouldRetryWithoutLinks =
+        !!error &&
+        nodeErrText.includes('document_links') &&
+        nodeErrText.includes('column')
+
+      if (shouldRetryWithoutLinks) {
+        const fallbackNodeRows: ProcessNodeInsert[] = snapshotNodes.map((n) => ({
+          id: n.id,
+          process_id: processId,
+          node_type: n.data.nodeType,
+          label: n.data.label,
+          description: n.data.description || null,
+          x_position: n.position.x,
+          y_position: n.position.y,
+          tagged_profile_ids: n.data.taggedProfileIds,
+          tagged_department_ids: n.data.taggedDepartmentIds,
+        }))
+        const retry = await supabase
+          .from('process_nodes')
+          .upsert(fallbackNodeRows, { onConflict: 'id' })
+        error = retry.error
+      }
+
       if (error) throw error
     }
 
@@ -540,6 +570,18 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
   const handleUpdateTaggedDepartments = useCallback(
     (nodeId: string, departmentIds: string[]) => {
       const next = nodesRef.current.map((n) => n.id === nodeId ? { ...n, data: { ...n.data, taggedDepartmentIds: departmentIds } } : n)
+      setNodes(next)
+      pushToHistory(next, edgesRef.current)
+      markDirty()
+    },
+    [setNodes, pushToHistory, markDirty]
+  )
+
+  const handleUpdateDocumentLinks = useCallback(
+    (nodeId: string, links: string[]) => {
+      const next = nodesRef.current.map((n) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, documentLinks: links } } : n
+      )
       setNodes(next)
       pushToHistory(next, edgesRef.current)
       markDirty()
@@ -747,6 +789,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
           nodeType,
           label: nodeType.charAt(0).toUpperCase() + nodeType.slice(1),
           description: '',
+          documentLinks: [],
           taggedProfileIds: [],
           taggedDepartmentIds: [],
         },
@@ -801,6 +844,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       allDepartments,
       onLabelChange: handleLabelChange,
       onDescriptionChange: handleDescriptionChange,
+      onUpdateDocumentLinks: handleUpdateDocumentLinks,
       onDelete: handleDeleteNode,
       onUpdateTaggedProfiles: handleUpdateTaggedProfiles,
       onUpdateTaggedDepartments: handleUpdateTaggedDepartments,
@@ -814,6 +858,7 @@ function ProcessCanvasInner({ processId, canEdit, isPublic = false }: ProcessCan
       allDepartments,
       handleLabelChange,
       handleDescriptionChange,
+      handleUpdateDocumentLinks,
       handleDeleteNode,
       handleUpdateTaggedProfiles,
       handleUpdateTaggedDepartments,
